@@ -105,12 +105,20 @@ class LanguageModel:
       similarity = lambda x: K.expand_dims(self.get_similarity()(x), 1)
       qa_model = merge([dropout(question_output), dropout(answer_output)],
                        mode=similarity, output_shape=lambda _: (None, 1))
+
+
       # mode='cos', dot_axes=1)
       self._qa_model = Model(input=[self.question, self.get_answer()],
                              output=qa_model)
       print(self._qa_model.output_shape)
 
     return self._qa_model
+
+  def relu(self, x, alpha=0., max_value=None):
+    if x != x :
+      return max_value
+    else:
+      return K.relu(x, alpha=alpha, max_value=max_value)
 
   def get_train_model(self):
     if self._models is None:
@@ -119,13 +127,17 @@ class LanguageModel:
     if self._qa_model is None:
       question_output, answer_output = self._models
       dropout = Dropout(self.similarity_params.get('similarity_dropout', 0.2))
-      similarity = lambda x: K.expand_dims(
-              K.relu(0.9 - self.get_similarity()(x)), 1)
+      # similarity = lambda x: K.expand_dims(
+      #         self.relu(0.9 - self.get_similarity()(x), max_value=1.), 1.)
+      similarity = lambda x: K.expand_dims(self.get_similarity()(x), 1)
       qa_model = merge([dropout(question_output), dropout(answer_output)],
                        mode=similarity, output_shape=lambda _: (None, 1))
-      # mode='cos', dot_axes=1)
+
+      full_connect = Dense(64, activation='relu')(qa_model)
+      main_loss = Dense(1, activation='sigmoid', name='main_output')(
+        full_connect)
       self._qa_model = Model(input=[self.question, self.get_answer()],
-                             output=qa_model)
+                             output=main_loss)
       print(self._qa_model.output_shape)
 
     return self._qa_model
@@ -136,25 +148,13 @@ class LanguageModel:
     good_similarity = qa_model([self.question, self.answer_good])
     loss = self.get_train_model()([self.question, self.answer_good])
 
-    # bad_similarity = qa_model([self.question, self.answer_bad])
-
-    # loss = merge([good_similarity, bad_similarity],
-    #              mode=lambda x: K.relu(self.config['margin'] - x[0] + x[1]),
-    #              output_shape=lambda x: x[0])
-
-    # loss = merge([good_similarity, good_similarity],
-    #              mode=lambda x: K.relu(1 - x[0]),
-    #              output_shape=lambda x: x[0])
-
-    self.prediction_model = Model(input=[self.question, self.answer_good],
-                                  output=good_similarity)
-    self.prediction_model.compile(loss=lambda y_true, y_pred: y_pred,
-                                  optimizer=optimizer, **kwargs)
-
     self.training_model = Model(input=[self.question, self.answer_good],
                                 output=loss)
-    self.training_model.compile(loss=lambda y_true, y_pred: y_pred,
+    self.training_model.compile(
+                                loss='binary_crossentropy',
                                 optimizer=optimizer, **kwargs)
+
+    self.prediction_model = self.training_model
 
   def fit(self, x, y, **kwargs):
     assert self.training_model is not None, 'Must compile the model before fitting data'
