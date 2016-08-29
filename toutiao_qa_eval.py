@@ -238,8 +238,8 @@ if __name__ == '__main__':
     },
 
     'similarity_params': {
-      'mode': 'gesd',
-      # 'mode': 'aesd',
+      # 'mode': 'gesd',
+      'mode': 'aesd',
       'gamma': 1,
       'c': 1,
       'd': 2,

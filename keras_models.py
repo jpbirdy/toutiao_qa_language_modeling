@@ -134,7 +134,7 @@ class LanguageModel:
     qa_model = self.get_qa_model()
 
     good_similarity = qa_model([self.question, self.answer_good])
-    # loss = self.get_train_model()([self.question, self.answer_good])
+    loss = self.get_train_model()([self.question, self.answer_good])
 
     # bad_similarity = qa_model([self.question, self.answer_bad])
 
@@ -142,9 +142,9 @@ class LanguageModel:
     #              mode=lambda x: K.relu(self.config['margin'] - x[0] + x[1]),
     #              output_shape=lambda x: x[0])
 
-    loss = merge([good_similarity, good_similarity],
-                 mode=lambda x: K.relu(1 - x[0]),
-                 output_shape=lambda x: x[0])
+    # loss = merge([good_similarity, good_similarity],
+    #              mode=lambda x: K.relu(1 - x[0]),
+    #              output_shape=lambda x: x[0])
 
     self.prediction_model = Model(input=[self.question, self.answer_good],
                                   output=good_similarity)
