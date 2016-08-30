@@ -5,7 +5,7 @@ from abc import abstractmethod
 from keras.engine import Input
 from keras.layers import merge, Embedding, Dropout, Convolution1D, Lambda, LSTM, Dense, TimeDistributed, constraints
 from keras import backend as K
-from keras.models import Model
+from keras.models import Model, model_from_json
 
 import numpy as np
 
@@ -169,6 +169,14 @@ class LanguageModel:
   def predict(self, x):
     assert self.prediction_model is not None and isinstance(self.prediction_model, Model)
     return self.prediction_model.predict_on_batch(x)
+
+  def save_model(self, file_name, **kwargs):
+    assert self.prediction_model is not None, 'Must compile the model before ' \
+                                              'saving model'
+    open(file_name, 'w').write(self.prediction_model.to_json())
+
+  def load_model(self, file_name, **kwargs):
+    self.prediction_model = model_from_json(open(file_name, 'r').read())
 
   def save_weights(self, file_name, **kwargs):
     assert self.prediction_model is not None, 'Must compile the model before saving weights'

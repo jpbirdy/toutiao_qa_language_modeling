@@ -36,12 +36,17 @@ class Evaluator:
   def save_epoch(self, model, epoch):
     if not os.path.exists('models/'):
       os.makedirs('models/')
-    model.save_weights('models/weights_epoch_%d.h5' % epoch, overwrite=True)
+    if not os.path.exists('models/%s' % self.conf.get('model_dir')):
+      os.makedirs('models/%s' % self.conf.get('model_dir'))
+    model.save_weights('models/%s/weights_epoch_%d.h5' %
+                       (self.conf.get('model_dir'), epoch), overwrite=True)
 
   def load_epoch(self, model, epoch):
-    assert os.path.exists('models/weights_epoch_%d.h5' % epoch), \
+    assert os.path.exists('models/%s/weights_epoch_%d.h5' %
+                          (self.conf.get('model_dir'), epoch)), \
       'Weights at epoch %d not found' % epoch
-    model.load_weights('models/weights_epoch_%d.h5' % epoch)
+    model.load_weights('models/%s/weights_epoch_%d.h5' %
+                          (self.conf.get('model_dir'), epoch))
 
   ##### Padding #####
 
@@ -58,7 +63,8 @@ class Evaluator:
 
   ##### Training #####
 
-  def print_time(self):
+  @staticmethod
+  def print_time():
     print(strftime('%Y-%m-%d %H:%M:%S :: ', localtime()), end='')
 
   def train(self, model):
@@ -93,7 +99,6 @@ class Evaluator:
 
     sample = self.conf.get('sample')
     if sample > 0:
-      import random
       print('Selected sample, num is %d' % sample)
       sample = random.sample(range(len(question_ids)), sample)
       question_ids = [question_ids[s] for s in sample]
@@ -143,7 +148,8 @@ class Evaluator:
 
   ##### Evaluation #####
 
-  def prog_bar(self, so_far, total, n_bars=20):
+  @staticmethod
+  def prog_bar(so_far, total, n_bars=20):
     n_complete = int(so_far * n_bars / total)
     if n_complete >= n_bars - 1:
       print('\r[' + '=' * n_bars + ']', end='')
@@ -232,21 +238,26 @@ class Evaluator:
 
 if __name__ == '__main__':
   import numpy as np
+  model_dir = sys.argv[1]
+  print('model path is ', model_dir)
 
   conf = {
     'question_len': 50,
     'answer_len': 50,
     # 'n_words': 22353,  # len(vocabulary) + 1
     'n_words': 37813,  # len(vocabulary) + 1
-    'margin': 0.02,
-    'sample': 1000,
+    # 'margin': 0.02,
+    'margin': 0.5,
+    'sample': 0,
+    'model_dir': model_dir,
 
     'training_params': {
       'save_every': 1,
       # 'batch_size': 20,
       'batch_size': 256,
-      # 'nb_epoch': 50,
-      'nb_epoch': 5,
+      # 'batch_size': 1024,
+      'nb_epoch': 50,
+      # 'nb_epoch': 5,
       # 'validation_split': 0.,
       'validation_split': 0.1,
       'optimizer': Adam(
@@ -286,7 +297,9 @@ if __name__ == '__main__':
   ##### Define model ######
   model = AttentionModel(conf)
   optimizer = conf.get('training_params', dict()).get('optimizer', 'rmsprop')
-  model.compile(optimizer=optimizer, metrics=['accuracy'])
+  model.compile(optimizer=optimizer,
+                # metrics=['accuracy']
+                )
 
   # save embedding layer
   # evaluator.load_epoch(model, 7)
