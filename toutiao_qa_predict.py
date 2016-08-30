@@ -8,122 +8,25 @@ from time import strftime, gmtime
 
 import pickle
 
+import pandas
 from keras.optimizers import Adam
 from scipy.stats import rankdata
 
+from deeplearning.toutiao_qa_language_modeling.toutiao_qa_eval import Evaluator
 from keras_models import EmbeddingModel, AttentionModel, ConvolutionModel
 
 random.seed(42)
 
 
-class Evaluator:
-  def __init__(self, conf=None):
-    data_path = './toutiao_qa_python/pkl'
-    # sys.exit(1)
-    self.path = data_path
-    self.conf = dict() if conf is None else conf
-    self.params = conf.get('training_params', dict())
-    # self.answers = self.load('answers')  # self.load('generated')
-    self._eval_sets = None
-
-  ##### Resources #####
-
-  def load(self, name):
-    return pickle.load(open(os.path.join(self.path, name), 'rb'))
-
-  ##### Loading / saving #####
-
-  def save_epoch(self, model, epoch):
-    if not os.path.exists('models/'):
-      os.makedirs('models/')
-    model.save_weights('models/weights_epoch_%d.h5' % epoch, overwrite=True)
-
-  def load_epoch(self, model, epoch):
-    assert os.path.exists('models/weights_epoch_%d.h5' % epoch), \
-      'Weights at epoch %d not found' % epoch
-    model.load_weights('models/weights_epoch_%d.h5' % epoch)
-
-  ##### Padding #####
-
-  def padq(self, data):
-    return self.pad(data, self.conf.get('question_len', None))
-
-  def pada(self, data):
-    return self.pad(data, self.conf.get('answer_len', None))
-
-  def pad(self, data, len=None):
-    from keras.preprocessing.sequence import pad_sequences
-    return pad_sequences(data, maxlen=len, padding='post',
-                         truncating='post', value=0)
-
-  ##### Training #####
-
-  def print_time(self):
-    print(strftime('%Y-%m-%d %H:%M:%S :: ', gmtime()), end='')
-
-  def train(self, model):
-    save_every = self.params.get('save_every', None)
-    batch_size = self.params.get('batch_size', 128)
-    nb_epoch = self.params.get('nb_epoch', 10)
-    split = self.params.get('validation_split', 0)
-
-    training_set = self.load('invited_info_train.pkl')
-    question_info = self.load('question_info.pkl')
-    user_info = self.load('user_info.pkl')
-
-    question_words_seq = [
-        list(question_info['words_seq'][x])
-        for x in training_set['question_id']]
-
-    # questions = list()
-    # answers = list()
-
-    answers_words_seq = [
-        list(user_info['user_desc_words_sec'][x])
-        for x in training_set['user_id']]
-
-    y = np.array(list(training_set['answer_flag']))
-
-    # questions = self.padq(questions)
-    question_words_seq = self.padq(question_words_seq)
-    answers_words_seq = self.pada(answers_words_seq)
-
-    val_loss = {'loss': 1., 'epoch': 0}
-
-    for i in range(1, nb_epoch):
-      # sample from all answers to get bad answers
-      print('Epoch %d :: ' % i, end='')
-      self.print_time()
-      hist = model.fit([question_words_seq, answers_words_seq], y, nb_epoch=1,
-                       batch_size=batch_size,
-                       validation_split=split)
-
-      if hist.history['val_loss'][0] < val_loss['loss']:
-        val_loss = {'loss': hist.history['val_loss'][0], 'epoch': i}
-      print('Best: Loss = {}, Epoch = {}'.format(val_loss['loss'],
-                                                 val_loss['epoch']))
-
-      if save_every is not None and i % save_every == 0:
-        self.save_epoch(model, i)
-
-    return val_loss
-
-  ##### Evaluation #####
-
-  def prog_bar(self, so_far, total, n_bars=20):
-    n_complete = int(so_far * n_bars / total)
-    if n_complete >= n_bars - 1:
-      print('\r[' + '=' * n_bars + ']', end='')
-    else:
-      s = '\r[' + '=' * (n_complete - 1) + '>' + \
-          '.' * (n_bars - n_complete) + ']'
-      print(s, end='')
+class EvaluatorEval(Evaluator):
 
   def predict(self, model):
     batch_size = self.params.get('batch_size', 128)
 
     import pandas as pd
     valid_set = pd.read_csv('toutiao_qa_python/validate_nolabel.txt')
+
+    valid_set.sort()
 
     question_info = self.load('question_info.pkl')
     user_info = self.load('user_info.pkl')
@@ -148,6 +51,15 @@ class Evaluator:
     output = []
     for i in valid_set.index:
       output.append([valid_set['qid'][i], valid_set['uid'][i], predict[i]])
+
+    import csv
+    output_file = open('output/valid.csv', 'w')
+    writer = csv.writer(output_file)
+    writer.writerow(['qid', 'uid', 'label'])
+    for x in output:
+      writer.writerow([x[0], x[1], x[2][0][0]])
+
+    output_file.close()
 
     return output
 
@@ -176,28 +88,53 @@ class Evaluator:
     predict = model.prediction_model.predict(
             [question_words_seq, answers_words_seq],
             batch_size=batch_size, verbose=1)
-    output = []
-    for i in invited_info_train.index:
-      output.append([invited_info_train['qid'][i], invited_info_train['uid'][i], predict[i]])
+    # output = []
+    # for i in invited_info_train.index:
+    #   output.append([invited_info_train['question_id'][i], invited_info_train[
+    #     'user_id'][i], predict[i]])
 
-    return output
+    invited_info_train['predict'] = [x[0][0] for x in predict]
+    train_group = invited_info_train.groupby('question_id')
+
+    scores = list()
+
+    for x in list(train_group):
+      question_id = x[0]
+      answer_info = x[1].sort('predict', ascending=False)
+      predict = [answer_info['predict'][x] * answer_info['answer_flag'][x]
+                 for x
+                 in answer_info.index]
+      from deeplearning.toutiao_qa_language_modeling.ndcg import ndcg_at_k
+      scores.append(ndcg_at_k(predict, 5) * 0.5 + ndcg_at_k(predict, 10) * 0.5)
+
+    print('ndcg mean is %lf' % np.mean(scores))
+
+    return train_group
 
 if __name__ == '__main__':
   import numpy as np
+
+  model_dir = '2016-08-30 16:18:23'
+  sim_type = 'gesd'
 
   conf = {
     'question_len': 50,
     'answer_len': 50,
     # 'n_words': 22353,  # len(vocabulary) + 1
     'n_words': 37813,  # len(vocabulary) + 1
-    'margin': 0.02,
+    # 'margin': 0.02,
+    'margin': 0.5,
+    'sample': 0,
+    'model_dir': model_dir,
 
     'training_params': {
       'save_every': 1,
       # 'batch_size': 20,
       'batch_size': 256,
-      # 'nb_epoch': 50,
-      'nb_epoch': 5,
+      # 'batch_size': 1024,
+      'nb_epoch': 50,
+      # 'nb_epoch': 5,
+      # 'validation_split': 0.,
       'validation_split': 0.1,
       'optimizer': Adam(
               clipnorm=1e-2),
@@ -223,20 +160,21 @@ if __name__ == '__main__':
     },
 
     'similarity_params': {
+      'mode': sim_type,
       # 'mode': 'gesd',
-      'mode': 'aesd',
+      # 'mode': 'aesd',
       'gamma': 1,
       'c': 1,
       'd': 2,
     }
   }
 
-  evaluator = Evaluator(conf)
+  evaluator = EvaluatorEval(conf)
 
   ##### Define model ######
   model = AttentionModel(conf)
   optimizer = conf.get('training_params', dict()).get('optimizer', 'rmsprop')
-  model.compile(optimizer=optimizer, metrics=['accuracy'])
+  model.compile(optimizer=optimizer)
 
   # save embedding layer
   # evaluator.load_epoch(model, 7)
@@ -246,16 +184,12 @@ if __name__ == '__main__':
 
   # train the model
   evaluator.load_epoch(model, 1)
-  output = evaluator.valid(model)
+  # output = evaluator.valid(model)
+  output = evaluator.predict(model)
+
   # print(output)
 
-  import csv
-  output_file = open('output/valid.csv', 'w')
-  writer = csv.writer(output_file)
-  writer.writerow(['qid', 'uid', 'label'])
-  for x in output:
-    writer.writerow([x[0], x[1], x[2][0][0]])
 
-  output_file.close()
+
 
 
