@@ -16,7 +16,7 @@ class LanguageModel:
   def __init__(self, config):
     self.question = Input(shape=(config['question_len'],), dtype='int32', name='question_base')
     self.answer_good = Input(shape=(config['answer_len'],), dtype='int32', name='answer_good_base')
-    # self.answer_bad = Input(shape=(config['answer_len'],), dtype='int32', name='answer_bad_base')
+    self.answer_bad = Input(shape=(config['answer_len'],), dtype='int32', name='answer_bad_base')
 
     self.config = config
     self.model_params = config.get('model_params', dict())
@@ -146,19 +146,24 @@ class LanguageModel:
     qa_model = self.get_qa_model()
 
     good_similarity = qa_model([self.question, self.answer_good])
-    loss = self.get_train_model()([self.question, self.answer_good])
+    bad_similarity = qa_model([self.question, self.answer_bad])
 
-    self.training_model = Model(input=[self.question, self.answer_good],
-                                output=loss)
-    self.training_model.compile(
-                                loss='binary_crossentropy',
+    loss = merge([good_similarity, bad_similarity],
+                 mode=lambda x: K.relu(self.config['margin'] - x[0] + x[1]),
+                 output_shape=lambda x: x[0])
+    self.prediction_model = Model(input=[self.question, self.answer_good],
+                                  output=good_similarity)
+    self.prediction_model.compile(loss=lambda y_true, y_pred: y_pred,
+                                  optimizer=optimizer, **kwargs)
+
+    self.training_model = Model(input=[self.question, self.answer_good,
+                                       self.answer_bad], output=loss)
+    self.training_model.compile(loss=lambda y_true, y_pred: y_pred,
                                 optimizer=optimizer, **kwargs)
 
-    self.prediction_model = self.training_model
-
-  def fit(self, x, y, **kwargs):
+  def fit(self, x, **kwargs):
     assert self.training_model is not None, 'Must compile the model before fitting data'
-    # y = np.zeros(shape=(x[0].shape[0],))  # doesn't get used
+    y = np.zeros(shape=(x[0].shape[0],))  # doesn't get used
     return self.training_model.fit(x, y, **kwargs)
 
   def predict(self, x):

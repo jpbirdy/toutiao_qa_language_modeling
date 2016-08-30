@@ -4,7 +4,7 @@ import os
 
 import sys
 import random
-from time import strftime, gmtime
+from time import strftime, gmtime, localtime
 
 import pickle
 
@@ -59,7 +59,7 @@ class Evaluator:
   ##### Training #####
 
   def print_time(self):
-    print(strftime('%Y-%m-%d %H:%M:%S :: ', gmtime()), end='')
+    print(strftime('%Y-%m-%d %H:%M:%S :: ', localtime()), end='')
 
   def train(self, model):
     save_every = self.params.get('save_every', None)
@@ -71,22 +71,53 @@ class Evaluator:
     question_info = self.load('question_info.pkl')
     user_info = self.load('user_info.pkl')
 
-    question_words_seq = [
-        list(question_info['words_seq'][x])
-        for x in training_set['question_id']]
-
     # questions = list()
     # answers = list()
 
-    answers_words_seq = [
-        list(user_info['user_desc_words_sec'][x])
-        for x in training_set['user_id']]
+    train_group = training_set.groupby('question_id')
 
-    y = np.array(list(training_set['answer_flag']))
+    question_ids = list()
+    good_answer_ids = list()
+    bad_answer_ids = list()
+
+    for x in list(train_group):
+      question_id = x[0]
+      answer_info = x[1]
+      good_bad = [(g, b) for g in answer_info['user_id'][
+          answer_info.answer_flag == 1] for b in answer_info['user_id'][
+          answer_info.answer_flag == 0]]
+      for gb in good_bad:
+        question_ids.append(question_id)
+        good_answer_ids.append(gb[0])
+        bad_answer_ids.append(gb[1])
+
+    sample = self.conf.get('sample')
+    if sample > 0:
+      import random
+      print('Selected sample, num is %d' % sample)
+      sample = random.sample(range(len(question_ids)), sample)
+      question_ids = [question_ids[s] for s in sample]
+      good_answer_ids = [good_answer_ids[s] for s in sample]
+      bad_answer_ids = [bad_answer_ids[s] for s in sample]
+
+    question_words_seq = [
+        list(question_info['words_seq'][x])
+        for x in question_ids]
+
+    answers_good_words_seq = [
+        list(user_info['user_desc_words_sec'][x])
+        for x in good_answer_ids]
+
+    answers_bad_words_seq = [
+        list(user_info['user_desc_words_sec'][x])
+        for x in bad_answer_ids]
+
+    # y = np.array(list(training_set['answer_flag']))
 
     # questions = self.padq(questions)
     question_words_seq = self.padq(question_words_seq)
-    answers_words_seq = self.pada(answers_words_seq)
+    answers_good_words_seq = self.pada(answers_good_words_seq)
+    answers_bad_words_seq = self.pada(answers_bad_words_seq)
 
     val_loss = {'loss': 1., 'epoch': 0}
 
@@ -94,7 +125,9 @@ class Evaluator:
       # sample from all answers to get bad answers
       print('Epoch %d :: ' % i, end='')
       self.print_time()
-      hist = model.fit([question_words_seq, answers_words_seq], y, nb_epoch=1,
+      hist = model.fit([question_words_seq, answers_good_words_seq,
+                       answers_bad_words_seq],
+                       nb_epoch=1,
                        batch_size=batch_size,
                        validation_split=split)
 
@@ -206,6 +239,7 @@ if __name__ == '__main__':
     # 'n_words': 22353,  # len(vocabulary) + 1
     'n_words': 37813,  # len(vocabulary) + 1
     'margin': 0.02,
+    'sample': 1000,
 
     'training_params': {
       'save_every': 1,
@@ -213,6 +247,7 @@ if __name__ == '__main__':
       'batch_size': 256,
       # 'nb_epoch': 50,
       'nb_epoch': 5,
+      # 'validation_split': 0.,
       'validation_split': 0.1,
       'optimizer': Adam(
               clipnorm=1e-2),
