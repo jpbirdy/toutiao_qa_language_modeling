@@ -1,8 +1,8 @@
 # coding=utf-8
-'''
+"""
 Created on 2016年7月25日
 @author: lenovo
-'''
+"""
 
 """Information Retrieval metrics
 Useful Resources:

@@ -301,15 +301,29 @@ class AttentionModel(LanguageModel):
     maxpool.__setattr__('supports_masking', True)
     avepool.__setattr__('supports_masking', True)
 
-    question_pool = merge([maxpool(question_f_rnn), maxpool(question_b_rnn)], mode='concat', concat_axis=-1)
+    cnn_q = Convolution1D(256, 5, activation='relu', border_mode='same',
+                          subsample_length=2, )
+
+    question_merge_layer = merge([question_f_rnn, question_b_rnn],
+                                 mode='concat',
+                 concat_axis=-1)
+    question_cnn = cnn_q(question_merge_layer)
+
 
     # answer rnn part
-    f_rnn = AttentionLSTM(self.model_params.get('n_lstm_dims', 141), question_pool, return_sequences=True,
+    f_rnn = AttentionLSTM(self.model_params.get('n_lstm_dims', 141),
+                          maxpool(question_cnn), return_sequences=True,
                           consume_less='mem', single_attention_param=True)
-    b_rnn = AttentionLSTM(self.model_params.get('n_lstm_dims', 141), question_pool, return_sequences=True,
+    b_rnn = AttentionLSTM(self.model_params.get('n_lstm_dims', 141),
+                          maxpool(question_cnn), return_sequences=True,
                           consume_less='mem', go_backwards=True, single_attention_param=True)
     answer_f_rnn = f_rnn(answer_embedding)
     answer_b_rnn = b_rnn(answer_embedding)
-    answer_pool = merge([maxpool(answer_f_rnn), maxpool(answer_b_rnn)], mode='concat', concat_axis=-1)
 
-    return question_pool, answer_pool
+
+    answer_merge_layer = merge([answer_f_rnn, answer_b_rnn], mode='concat',
+                               concat_axis=-1)
+
+    answer_cnn = cnn_q(answer_merge_layer)
+
+    return avepool(question_cnn), avepool(answer_cnn)
