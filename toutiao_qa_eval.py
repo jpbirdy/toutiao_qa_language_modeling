@@ -238,7 +238,10 @@ class Evaluator:
 
 if __name__ == '__main__':
   import numpy as np
-  model_dir = sys.argv[1]
+  try:
+    model_dir = sys.argv[1]
+  except:
+    model_dir = '.'
   print('model path is ', model_dir)
 
   conf = {
@@ -246,8 +249,8 @@ if __name__ == '__main__':
     'answer_len': 50,
     # 'n_words': 22353,  # len(vocabulary) + 1
     'n_words': 37813,  # len(vocabulary) + 1
-    # 'margin': 0.02,
-    'margin': 0.5,
+    'margin': 0.02,
+    # 'margin': 0.5,
     'sample': 0,
     'model_dir': model_dir,
 
@@ -300,7 +303,6 @@ if __name__ == '__main__':
   model.compile(optimizer=optimizer,
                 # metrics=['accuracy']
                 )
-
   # save embedding layer
   # evaluator.load_epoch(model, 7)
   # embedding_layer = model.prediction_model.layers[2].layers[2]
@@ -310,7 +312,7 @@ if __name__ == '__main__':
   # train the model
   # evaluator.load_epoch(model, 1)
   # print('load model success.')
-  best_loss = evaluator.train(model)
+  # best_loss = evaluator.train(model)
 
 
 

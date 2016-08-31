@@ -3,7 +3,8 @@ from __future__ import print_function
 from abc import abstractmethod
 
 from keras.engine import Input
-from keras.layers import merge, Embedding, Dropout, Convolution1D, Lambda, LSTM, Dense, TimeDistributed, constraints
+from keras.layers import merge, Embedding, Dropout, Convolution1D, Lambda, LSTM, Dense, TimeDistributed, constraints, \
+  Convolution2D
 from keras import backend as K
 from keras.models import Model, model_from_json
 
@@ -111,6 +112,7 @@ class LanguageModel:
       self._qa_model = Model(input=[self.question, self.get_answer()],
                              output=qa_model)
       print(self._qa_model.output_shape)
+      self._qa_model.summary()
 
     return self._qa_model
 
@@ -160,6 +162,9 @@ class LanguageModel:
                                        self.answer_bad], output=loss)
     self.training_model.compile(loss=lambda y_true, y_pred: y_pred,
                                 optimizer=optimizer, **kwargs)
+
+    self.prediction_model.summary()
+
 
   def fit(self, x, **kwargs):
     assert self.training_model is not None, 'Must compile the model before fitting data'
@@ -301,12 +306,17 @@ class AttentionModel(LanguageModel):
     maxpool.__setattr__('supports_masking', True)
     avepool.__setattr__('supports_masking', True)
 
-    cnn_q = Convolution1D(256, 5, activation='relu', border_mode='same',
-                          subsample_length=2, )
+
+    cnn_q = Convolution1D(nb_filter=256, filter_length=5,
+                          activation='relu', border_mode='same',
+                          subsample_length=2)
 
     question_merge_layer = merge([question_f_rnn, question_b_rnn],
                                  mode='concat',
                  concat_axis=-1)
+
+    cnn_q.__setattr__('supports_masking', True)
+
     question_cnn = cnn_q(question_merge_layer)
 
 
