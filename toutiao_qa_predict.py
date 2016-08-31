@@ -113,14 +113,15 @@ class EvaluatorEval(Evaluator):
 if __name__ == '__main__':
   import numpy as np
 
-  model_dir = '.'  # 0.02aesd,epoch4 local total 0.670610
+  # model_dir = '.'  # 0.02aesd,epoch4 local total 0.677434
                    #
-  # model_dir = '2016-08-30 16:18:23'  #0.02gesd,epoch4 local total 0.646764
+  model_dir = '2016-08-30 16:18:23'  #0.02gesd,epoch4 local total 0.646764
+                                       #epoch5 local total 0.649898
   # model_dir = '2016-08-30 16:43:19'  #0.1gesd,epoch4 local total 0.612545
   # model_dir = '2016-08-30 17:08:44'  #0.5gesd,epoch4 local total 0.606227
   # model_dir = '2016-08-30 18:01:43'  #0.5aesd,epoch4 local total 0.590244
-  # sim_type = 'gesd'
-  sim_type = 'aesd'
+  sim_type = 'gesd'
+  # sim_type = 'aesd'
   epoch = 5
 
   conf = {
@@ -190,8 +191,8 @@ if __name__ == '__main__':
 
   # train the model
   evaluator.load_epoch(model, epoch)
-  output = evaluator.valid(model)
-  # output = evaluator.predict(model)
+  # output = evaluator.valid(model)
+  output = evaluator.predict(model)
 
   # print(output)
 
