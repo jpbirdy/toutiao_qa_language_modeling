@@ -238,7 +238,11 @@ class Evaluator:
 
 if __name__ == '__main__':
   import numpy as np
-  model_dir = sys.argv[1]
+  try:
+    model_dir = sys.argv[1]
+  except:
+    model_dir = '.'
+    
   print('model path is ', model_dir)
 
   conf = {
@@ -266,16 +270,18 @@ if __name__ == '__main__':
 
     'model_params': {
       # 'n_embed_dims': 100,
-      'n_embed_dims': 256,
-      'n_hidden': 200,
+      # 'n_embed_dims': 256,
+      'n_embed_dims': 128,
+      # 'n_hidden': 200,
 
       # convolution
-      'nb_filters': 1000,
+      # 'nb_filters': 1000,
       # * 4
-      'conv_activation': 'tanh',
+      # 'conv_activation': 'tanh',
 
       # recurrent
-      'n_lstm_dims': 141,
+      # 'n_lstm_dims': 141,
+      'n_lstm_dims': 64,
       # * 2
 
       # 'initial_embed_weights':
