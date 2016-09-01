@@ -111,7 +111,7 @@ class LanguageModel:
       self._qa_model = Model(input=[self.question, self.get_answer()],
                              output=qa_model)
       print(self._qa_model.output_shape)
-
+    self._qa_model.summary()
     return self._qa_model
 
   def relu(self, x, alpha=0., max_value=None):

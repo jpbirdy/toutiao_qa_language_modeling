@@ -242,16 +242,15 @@ if __name__ == '__main__':
     model_dir = sys.argv[1]
   except:
     model_dir = '.'
-    
+
   print('model path is ', model_dir)
 
   conf = {
     'question_len': 50,
     'answer_len': 50,
-    # 'n_words': 22353,  # len(vocabulary) + 1
     'n_words': 37813,  # len(vocabulary) + 1
-    # 'margin': 0.02,
-    'margin': 0.5,
+    'margin': 0.02,
+    # 'margin': 0.5,
     'sample': 0,
     'model_dir': model_dir,
 
@@ -318,15 +317,3 @@ if __name__ == '__main__':
   # print('load model success.')
   best_loss = evaluator.train(model)
 
-
-
-  # evaluate mrr for a particular epoch
-  # evaluator.load_epoch(model, best_loss['epoch'])
-  # evaluator.load_epoch(model, 31)
-  # evaluator.get_mrr(model, evaluate_all=True)
-  # mrr = evaluator.get_mrr(model, evaluate_all=False)
-  # print(mrr)
-  # for epoch in range(1, 100):
-  #     print('Epoch %d' % epoch)
-  #     evaluator.load_epoch(model, epoch)
-  #     evaluator.get_mrr(model, evaluate_all=True)
