@@ -9,9 +9,7 @@ from time import strftime, gmtime, localtime
 import pickle
 
 from keras.optimizers import Adam
-from scipy.stats import rankdata
-
-from keras_models import EmbeddingModel, AttentionModel, ConvolutionModel
+from keras_models_w2v import AttentionModelW2V
 
 random.seed(42)
 
@@ -25,6 +23,8 @@ class Evaluator:
     self.params = conf.get('training_params', dict())
     # self.answers = self.load('answers')  # self.load('generated')
     self._eval_sets = None
+    self.w2v = self.load_w2v()
+    self.w2v_len = conf.get('w2v_len')
 
   ##### Resources #####
 
@@ -32,6 +32,22 @@ class Evaluator:
     return pickle.load(open(os.path.join(self.path, name), 'rb'))
 
   ##### Loading / saving #####
+
+  def save_model(self, model):
+    if not os.path.exists('models/'):
+      os.makedirs('models/')
+    if not os.path.exists('models/%s' % self.conf.get('model_dir')):
+      os.makedirs('models/%s' % self.conf.get('model_dir'))
+
+    pickle.dump(self.conf, open('models/%s/conf' % self.conf.get('model_dir'),
+                                'wb'))
+    model.save_model('models/%s/model.json' % self.conf.get('model_dir'))
+
+  def load_model(self, model_dir):
+    assert os.path.exists('models/%s/model.json' % model_dir),\
+      'model file not found'
+    model = AttentionModelW2V(self.conf)
+    return model.load_model('models/%s/model.json' % model_dir)
 
   def save_epoch(self, model, epoch):
     if not os.path.exists('models/'):
@@ -59,7 +75,7 @@ class Evaluator:
   def pad(self, data, len=None):
     from keras.preprocessing.sequence import pad_sequences
     return pad_sequences(data, maxlen=len, padding='post',
-                         truncating='post', value=0)
+                         truncating='post', value=-1)
 
   ##### Training #####
 
@@ -79,6 +95,24 @@ class Evaluator:
     question_info = self.load('question_info.pkl')
     user_info = self.load('user_info.pkl')
 
+    print('start sequences padding')
+
+    question_info['words_seq_padding'] = list(self.padq(list(question_info[
+                                                          'words_seq'])))
+    user_info['user_desc_words_sec_padding'] = list(self.pada(list(user_info[
+                                                              'user_desc_words_sec'])))
+    print('start word2vec mapping')
+
+    get_w2v = lambda w: [
+      list(self.w2v[str(x)] if self.w2v.__contains__(str(x)) else np.zeros(
+              self.w2v_len))
+      for x in w]
+
+    question_info['words_seq_padding_w2v'] = \
+      question_info['words_seq_padding'].apply(get_w2v)
+    user_info['user_desc_words_sec_padding_w2v'] = \
+      user_info['user_desc_words_sec_padding'].apply(get_w2v)
+
     # questions = list()
     # answers = list()
 
@@ -97,6 +131,8 @@ class Evaluator:
     valid_qid = list()
     valid_uid = list()
     valid_answer = list()
+
+    print('start sampling')
 
     for x in list(train_group):
       question_id = x[0]
@@ -128,37 +164,31 @@ class Evaluator:
       good_answer_ids = [good_answer_ids[s] for s in sample]
       bad_answer_ids = [bad_answer_ids[s] for s in sample]
 
-    question_words_seq = [
-        list(question_info['words_seq'][x])
-        for x in question_ids]
+    question_words_seq = np.array([
+        list(question_info['words_seq_padding_w2v'][x])
+        for x in question_ids])
 
+    answers_good_words_seq = np.array([
+        list(user_info['user_desc_words_sec_padding_w2v'][x])
+        for x in good_answer_ids])
 
-    answers_good_words_seq = [
-        list(user_info['user_desc_words_sec'][x])
-        for x in good_answer_ids]
-
-    answers_bad_words_seq = [
-        list(user_info['user_desc_words_sec'][x])
-        for x in bad_answer_ids]
+    answers_bad_words_seq = np.array([
+        list(user_info['user_desc_words_sec_padding_w2v'][x])
+        for x in bad_answer_ids])
 
     # y = np.array(list(training_set['answer_flag']))
 
-    # questions = self.padq(questions)
-    question_words_seq = self.padq(question_words_seq)
-    answers_good_words_seq = self.pada(answers_good_words_seq)
-    answers_bad_words_seq = self.pada(answers_bad_words_seq)
 
+    print('start valid data set generater')
     # valid set
-    valid_question_words_seq = [
-      list(question_info['words_seq'][x])
-      for x in valid_qid]
+    valid_question_words_seq = np.array([
+      list(question_info['words_seq_padding_w2v'][x])
+      for x in valid_qid])
 
-    valid_answers_words_seq = [
-      list(user_info['user_desc_words_sec'][x])
-      for x in valid_uid]
+    valid_answers_words_seq = np.array([
+      list(user_info['user_desc_words_sec_padding_w2v'][x])
+      for x in valid_uid])
 
-    valid_question_words_seq = self.padq(valid_question_words_seq)
-    valid_answers_words_seq = self.padq(valid_answers_words_seq)
     valid_data = {'qid': valid_qid, 'uid': valid_uid, 'answer_flag':
       valid_answer}
     valid_set = pd.DataFrame(data=valid_data)
@@ -166,6 +196,10 @@ class Evaluator:
 
     # val_loss = {'loss': 1., 'epoch': 0}
     val_ndcg = {'ndcg':0, 'epoch':0}
+
+    print('saving model')
+    self.save_model(model)
+    print('start training')
 
     for i in range(1, nb_epoch):
       # sample from all answers to get bad answers
@@ -216,6 +250,11 @@ class Evaluator:
     # return val_loss
     return val_ndcg
 
+  def load_w2v(self):
+    from gensim.models import Word2Vec
+    return Word2Vec.load('w2v_embending.m')
+
+
 if __name__ == '__main__':
   import numpy as np
   try:
@@ -228,7 +267,7 @@ if __name__ == '__main__':
   conf = {
     'question_len': 50,
     'answer_len': 50,
-    'n_words': 37813,  # len(vocabulary) + 1
+    'w2v_len': 256,
     # 'margin': 0.02,
     'margin': 0.05,
     # 'margin': 0.5,
@@ -252,7 +291,7 @@ if __name__ == '__main__':
     'model_params': {
       # 'n_embed_dims': 100,
       # 'n_embed_dims': 256,
-      'n_embed_dims': 128,
+      # 'n_embed_dims': 128,
       # 'n_hidden': 200,
 
       # convolution
@@ -282,7 +321,7 @@ if __name__ == '__main__':
   evaluator = Evaluator(conf)
 
   ##### Define model ######
-  model = AttentionModel(conf)
+  model = AttentionModelW2V(conf)
   optimizer = conf.get('training_params', dict()).get('optimizer', 'rmsprop')
   model.compile(optimizer=optimizer,
                 # metrics=['accuracy']

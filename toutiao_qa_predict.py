@@ -12,8 +12,8 @@ import pandas
 from keras.optimizers import Adam
 from scipy.stats import rankdata
 
+from keras_models_w2v import AttentionModelW2V
 from toutiao_qa_eval import Evaluator
-from keras_models import EmbeddingModel, AttentionModel, ConvolutionModel
 
 random.seed(42)
 
@@ -21,29 +21,43 @@ random.seed(42)
 class EvaluatorEval(Evaluator):
 
   def predict(self, model):
-    batch_size = self.params.get('batch_size', 128)
+    batch_size = 128
 
     import pandas as pd
     valid_set = pd.read_csv('toutiao_qa_python/validate_nolabel.txt')
 
-    valid_set.sort()
-
     question_info = self.load('question_info.pkl')
     user_info = self.load('user_info.pkl')
 
-    question_words_seq = [
-      list(question_info['words_seq'][x])
-      for x in valid_set['qid']]
+    print('start sequences padding')
+
+    question_info['words_seq_padding'] = list(self.padq(list(question_info[
+                                                               'words_seq'])))
+    user_info['user_desc_words_sec_padding'] = list(self.pada(list(user_info[
+                                                                     'user_desc_words_sec'])))
+    print('start word2vec mapping')
+
+    get_w2v = lambda w: [
+      list(self.w2v[str(x)] if self.w2v.__contains__(str(x)) else np.zeros(
+              self.w2v_len))
+      for x in w]
+
+    question_info['words_seq_padding_w2v'] = \
+      question_info['words_seq_padding'].apply(get_w2v)
+    user_info['user_desc_words_sec_padding_w2v'] = \
+      user_info['user_desc_words_sec_padding'].apply(get_w2v)
+
+
+    question_words_seq = np.array([
+      list(question_info['words_seq_padding_w2v'][x])
+      for x in valid_set['qid']])
 
     # questions = list()
     # answers = list()
 
-    answers_words_seq = [
-      list(user_info['user_desc_words_sec'][x])
-      for x in valid_set['uid']]
-
-    question_words_seq = self.padq(question_words_seq)
-    answers_words_seq = self.pada(answers_words_seq)
+    answers_words_seq = np.array([
+      list(user_info['user_desc_words_sec_padding_w2v'][x])
+      for x in valid_set['uid']])
 
     predict = model.prediction_model.predict(
                     [question_words_seq, answers_words_seq],
@@ -64,26 +78,41 @@ class EvaluatorEval(Evaluator):
     return output
 
   def valid(self, model):
-    batch_size = self.params.get('batch_size', 128)
+    batch_size = 128
 
     invited_info_train = self.load('invited_info_train.pkl')
 
     question_info = self.load('question_info.pkl')
     user_info = self.load('user_info.pkl')
 
-    question_words_seq = [
-      list(question_info['words_seq'][x])
-      for x in invited_info_train['question_id']]
+    print('start sequences padding')
+
+    question_info['words_seq_padding'] = list(self.padq(list(question_info[
+                                                               'words_seq'])))
+    user_info['user_desc_words_sec_padding'] = list(self.pada(list(user_info[
+                                                                     'user_desc_words_sec'])))
+    print('start word2vec mapping')
+
+    get_w2v = lambda w: [
+      list(self.w2v[str(x)] if self.w2v.__contains__(str(x)) else np.zeros(
+              self.w2v_len))
+      for x in w]
+
+    question_info['words_seq_padding_w2v'] = \
+      question_info['words_seq_padding'].apply(get_w2v)
+    user_info['user_desc_words_sec_padding_w2v'] = \
+      user_info['user_desc_words_sec_padding'].apply(get_w2v)
+
+    question_words_seq = np.array([
+      list(question_info['words_seq_padding_w2v'][x])
+      for x in invited_info_train['question_id']])
 
     # questions = list()
     # answers = list()
 
-    answers_words_seq = [
-      list(user_info['user_desc_words_sec'][x])
-      for x in invited_info_train['user_id']]
-
-    question_words_seq = self.padq(question_words_seq)
-    answers_words_seq = self.pada(answers_words_seq)
+    answers_words_seq = np.array([
+      list(user_info['user_desc_words_sec_padding_w2v'][x])
+      for x in invited_info_train['user_id']])
 
     predict = model.prediction_model.predict(
             [question_words_seq, answers_words_seq],
@@ -113,88 +142,13 @@ class EvaluatorEval(Evaluator):
 if __name__ == '__main__':
   import numpy as np
 
-  # model_dir = '.'  # 0.02aesd,epoch4 local total 0.677434
-                   #
-  # model_dir = '2016-08-30 16:18:23'  #0.02gesd,epoch4 local total 0.646764
-                                       #epoch5 local total 0.649898
-  # model_dir = '2016-08-30 16:43:19'  #0.1gesd,epoch4 local total 0.612545
-  # model_dir = '2016-08-30 17:08:44'  #0.5gesd,epoch4 local total 0.606227
-  # model_dir = '2016-08-30 18:01:43'  #0.5aesd,epoch4 local total 0.590244
-  model_dir = '2016-08-31 17:15:11'  #modify param 0.02aesd,epoch1 0.637881
-                                     #2  0.668108
-                                     #3  0.678860
-                                     #4  0.68599
-                                     #9  0.705385
-  # sim_type = 'gesd'
-  sim_type = 'aesd'
+  model_dir = '2016-09-09 11:36:33'
   epoch = 5
-
-  conf = {
-    'question_len': 50,
-    'answer_len': 50,
-    'n_words': 37813,  # len(vocabulary) + 1
-    'margin': 0.02,
-    # 'margin': 0.5,
-    'sample': 0,
-    'model_dir': model_dir,
-
-    'training_params': {
-      'save_every': 1,
-      # 'batch_size': 20,
-      'batch_size': 256,
-      # 'batch_size': 1024,
-      'nb_epoch': 50,
-      # 'nb_epoch': 5,
-      # 'validation_split': 0.,
-      'validation_split': 0.1,
-      'optimizer': Adam(
-              clipnorm=1e-2),
-    },
-
-    'model_params': {
-      # 'n_embed_dims': 100,
-      # 'n_embed_dims': 256,
-      'n_embed_dims': 128,
-      # 'n_hidden': 200,
-
-      # convolution
-      # 'nb_filters': 1000,
-      # * 4
-      # 'conv_activation': 'tanh',
-
-      # recurrent
-      # 'n_lstm_dims': 141,
-      'n_lstm_dims': 64,
-      # * 2
-
-      # 'initial_embed_weights':
-      #   np.load('./word2vec_100_dim.embeddings'),
-      'similarity_dropout': 0.5,
-    },
-
-    'similarity_params': {
-      # 'mode': 'gesd',
-      'mode': 'aesd',
-      'gamma': 1,
-      'c': 1,
-      'd': 2,
-    }
-  }
+  conf = pickle.load(open('models/%s/conf' % model_dir, 'rb'))
 
   evaluator = EvaluatorEval(conf)
-
-  ##### Define model ######
-  model = AttentionModel(conf)
-  optimizer = conf.get('training_params', dict()).get('optimizer', 'rmsprop')
-  model.compile(optimizer=optimizer)
-
-  # save embedding layer
-  # evaluator.load_epoch(model, 7)
-  # embedding_layer = model.prediction_model.layers[2].layers[2]
-  # weights = embedding_layer.get_weights()[0]
-  # np.save(open('models/embedding_1000_dim.h5', 'wb'), weights)
-
-  # train the model
+  model = AttentionModelW2V(conf)
+  # model = evaluator.load_model(model_dir)
   evaluator.load_epoch(model, epoch)
   output = evaluator.valid(model)
   # output = evaluator.predict(model)

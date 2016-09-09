@@ -270,8 +270,8 @@ class AttentionModel(LanguageModel):
     answer = self.get_answer()
 
     # add embedding layers
-    weights = self.model_params.get('initial_embed_weights', None)
-    weights = weights if weights is None else [weights]
+    # weights = self.model_params.get('initial_embed_weights', None)
+    # weights = weights if weights is None else [weights]
     embedding = Embedding(input_dim=self.config['n_words'],
                           output_dim=self.model_params.get('n_embed_dims', 256),
                           # weights=weights,
