@@ -32,10 +32,10 @@ class LanguageModel:
     self.prediction_model = None
 
   def get_answer(self):
-    # if self._answer is None:
-    #   self._answer = Input(shape=(self.config['answer_len'],), dtype='int32', name='answer')
-    # return self._answer
-    return self.answer_good
+    if self._answer is None:
+      self._answer = Input(shape=(self.config['answer_len'],), dtype='int32', name='answer')
+    return self._answer
+    # return self.answer_good
 
   @abstractmethod
   def build(self):
