@@ -49,14 +49,14 @@ class EvaluatorEval(Evaluator):
 
 
     question_words_seq = np.array([
-      list(question_info['words_seq_padding_w2v'][x])
+      question_info['words_seq_padding_w2v'][x]
       for x in valid_set['qid']])
 
     # questions = list()
     # answers = list()
 
     answers_words_seq = np.array([
-      list(user_info['user_desc_words_sec_padding_w2v'][x])
+      user_info['user_desc_words_sec_padding_w2v'][x]
       for x in valid_set['uid']])
 
     predict = model.prediction_model.predict(
@@ -104,14 +104,14 @@ class EvaluatorEval(Evaluator):
       user_info['user_desc_words_sec_padding'].apply(get_w2v)
 
     question_words_seq = np.array([
-      list(question_info['words_seq_padding_w2v'][x])
+      question_info['words_seq_padding_w2v'][x]
       for x in invited_info_train['question_id']])
 
     # questions = list()
     # answers = list()
 
     answers_words_seq = np.array([
-      list(user_info['user_desc_words_sec_padding_w2v'][x])
+      user_info['user_desc_words_sec_padding_w2v'][x]
       for x in invited_info_train['user_id']])
 
     predict = model.prediction_model.predict(
@@ -142,13 +142,15 @@ class EvaluatorEval(Evaluator):
 if __name__ == '__main__':
   import numpy as np
 
-  model_dir = '2016-09-09 11:36:33'
-  epoch = 5
+  model_dir = '2016-09-09 16:42:37'
+  epoch = 2
   conf = pickle.load(open('models/%s/conf' % model_dir, 'rb'))
 
   evaluator = EvaluatorEval(conf)
   model = AttentionModelW2V(conf)
-  # model = evaluator.load_model(model_dir)
+
+  optimizer = conf.get('training_params', dict()).get('optimizer', 'rmsprop')
+  model.compile(optimizer=optimizer)
   evaluator.load_epoch(model, epoch)
   output = evaluator.valid(model)
   # output = evaluator.predict(model)
