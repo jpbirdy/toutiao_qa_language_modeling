@@ -198,8 +198,8 @@ if __name__ == '__main__':
 
   # train the model
   evaluator.load_epoch(model, epoch)
-  output = evaluator.valid(model)
-  # output = evaluator.predict(model)
+  # output = evaluator.valid(model)
+  output = evaluator.predict(model)
 
   # print(output)
 
