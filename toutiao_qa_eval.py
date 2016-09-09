@@ -105,8 +105,8 @@ class Evaluator:
     print('start word2vec mapping')
 
     get_w2v = lambda w: [
-      list(self.w2v[str(x)] if self.w2v.__contains__(str(x)) else np.zeros(
-              self.w2v_len))
+      self.w2v[str(x)] if self.w2v.__contains__(str(x)) else np.zeros(
+              self.w2v_len)
       for x in w]
 
     question_info['words_seq_padding_w2v'] = \
@@ -181,18 +181,14 @@ class Evaluator:
         user_info['user_desc_words_sec_padding_w2v'][x]
         for x in bad_answer_ids])
 
-    exit()
-    # y = np.array(list(training_set['answer_flag']))
-
-
     print('start valid data set generater')
     # valid set
     valid_question_words_seq = np.array([
-      list(question_info['words_seq_padding_w2v'][x])
+      question_info['words_seq_padding_w2v'][x]
       for x in valid_qid])
 
     valid_answers_words_seq = np.array([
-      list(user_info['user_desc_words_sec_padding_w2v'][x])
+      user_info['user_desc_words_sec_padding_w2v'][x]
       for x in valid_uid])
 
     valid_data = {'qid': valid_qid, 'uid': valid_uid, 'answer_flag':
