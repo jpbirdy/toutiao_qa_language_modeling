@@ -23,8 +23,9 @@ class Evaluator:
     self.params = conf.get('training_params', dict())
     # self.answers = self.load('answers')  # self.load('generated')
     self._eval_sets = None
-    self.w2v = self.load_w2v()
     self.w2v_len = conf.get('w2v_len')
+    self.w2v = self.load_w2v()
+
 
   ##### Resources #####
 
@@ -165,18 +166,22 @@ class Evaluator:
       bad_answer_ids = [bad_answer_ids[s] for s in sample]
 
     print('start seq mapping')
+    print('step 1, question seq')
     question_words_seq = np.array([
-        list(question_info['words_seq_padding_w2v'][x])
+        question_info['words_seq_padding_w2v'][x]
         for x in question_ids])
 
+    print('step 2, answer good seq')
     answers_good_words_seq = np.array([
-        list(user_info['user_desc_words_sec_padding_w2v'][x])
+        user_info['user_desc_words_sec_padding_w2v'][x]
         for x in good_answer_ids])
 
+    print('step 3, answer bad seq')
     answers_bad_words_seq = np.array([
-        list(user_info['user_desc_words_sec_padding_w2v'][x])
+        user_info['user_desc_words_sec_padding_w2v'][x]
         for x in bad_answer_ids])
 
+    exit()
     # y = np.array(list(training_set['answer_flag']))
 
 
@@ -253,7 +258,7 @@ class Evaluator:
 
   def load_w2v(self):
     from gensim.models import Word2Vec
-    return Word2Vec.load('w2v_embending.m')
+    return Word2Vec.load('w2v_embending_%d.m' % self.w2v_len)
 
 
 if __name__ == '__main__':
@@ -268,7 +273,8 @@ if __name__ == '__main__':
   conf = {
     'question_len': 20,
     'answer_len': 20,
-    'w2v_len': 256,
+    # 'w2v_len': 256,
+    'w2v_len': 50,
     # 'margin': 0.02,
     'margin': 0.05,
     # 'margin': 0.5,
