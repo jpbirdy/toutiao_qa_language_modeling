@@ -164,6 +164,7 @@ class Evaluator:
       good_answer_ids = [good_answer_ids[s] for s in sample]
       bad_answer_ids = [bad_answer_ids[s] for s in sample]
 
+    print('start seq mapping')
     question_words_seq = np.array([
         list(question_info['words_seq_padding_w2v'][x])
         for x in question_ids])
@@ -233,7 +234,7 @@ class Evaluator:
 
       valid_ndcg = np.mean(scores)
       print('ndcg mean is %lf' % valid_ndcg)
-      if val_ndcg > val_ndcg['ndcg']:
+      if valid_ndcg > val_ndcg['ndcg']:
         val_ndcg = {'ndcg': valid_ndcg, 'epoch':i}
 
       print('Best: Ndcg = {}, Epoch = {}'.format(val_ndcg['ndcg'],
@@ -265,8 +266,8 @@ if __name__ == '__main__':
   print('model path is ', model_dir)
 
   conf = {
-    'question_len': 50,
-    'answer_len': 50,
+    'question_len': 20,
+    'answer_len': 20,
     'w2v_len': 256,
     # 'margin': 0.02,
     'margin': 0.05,
