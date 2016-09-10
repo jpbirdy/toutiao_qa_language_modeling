@@ -20,7 +20,7 @@ setences.extend([list(np.array(x, dtype=str)) for x in question_info['character_
 setences.extend([list(np.array(x, dtype=str)) for x in user_info['user_desc_words_sec'] if len(x)>0])
 
 size = 100
-w2v = Word2Vec(setences, size=size, window=10,)
+w2v = Word2Vec(setences, size=size, window=5,)
 
 #
 w2v.save('w2v_embending_%d.m' % size)
