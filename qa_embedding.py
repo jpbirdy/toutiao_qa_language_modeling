@@ -16,12 +16,19 @@ setences = []
 
 import numpy as np
 
-setences.extend([list(np.array(x, dtype=str)) for x in question_info['character_seq'] if len(x)>0])
+setences.extend([list(np.array(x, dtype=str)) for x in question_info['words_seq'] if len(x)>0])
 setences.extend([list(np.array(x, dtype=str)) for x in user_info['user_desc_words_sec'] if len(x)>0])
 
-w2v = Word2Vec(setences, size=256, window=10,)
+size = 100
 
+w2v = Word2Vec(setences, size=size, window=10,)
 
 #
-w2v.save('w2v_embending.m')
+w2v.save('w2v_word_embending_%d.m' % size)
+
+setences = []
+setences.extend([list(np.array(x, dtype=str)) for x in question_info['character_seq'] if len(x)>0])
+setences.extend([list(np.array(x, dtype=str)) for x in user_info['user_desc_characters_sec'] if len(x)>0])
+
+w2v.save('w2v_word_embending_%d.m' % size)
 

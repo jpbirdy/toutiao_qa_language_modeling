@@ -123,7 +123,7 @@ if __name__ == '__main__':
                                      #3  0.678860
                                      #4  0.68599
                                      #9  0.705385
-  model_dir = '2016-09-09 09:19:06'
+  model_dir = '2016-09-10 11:18:29'
   epoch = 1
 
   conf = pickle.load(open('models/%s/conf' % model_dir, 'rb'))
@@ -142,8 +142,8 @@ if __name__ == '__main__':
 
   # train the model
   evaluator.load_epoch(model, epoch)
-  output = evaluator.valid(model)
-  # output = evaluator.predict(model)
+  # output = evaluator.valid(model)
+  output = evaluator.predict(model)
 
   # print(output)
 
