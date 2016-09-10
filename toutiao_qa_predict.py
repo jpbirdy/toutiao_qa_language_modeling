@@ -126,65 +126,11 @@ if __name__ == '__main__':
                                      #4  0.68599
                                      #9  0.705385
   model_dir = '2016-09-09 09:19:06'
-
-  sim_type = 'gesd'
-  # sim_type = 'aesd'
   epoch = 1
 
-  conf = {
-    'question_len': 50,
-    'answer_len': 50,
-    'n_words': 37813,  # len(vocabulary) + 1
-    'margin': 0.02,
-    # 'margin': 0.5,
-    'sample': 0,
-    'model_dir': model_dir,
-
-    'training_params': {
-      'save_every': 1,
-      # 'batch_size': 20,
-      'batch_size': 256,
-      # 'batch_size': 1024,
-      'nb_epoch': 50,
-      # 'nb_epoch': 5,
-      # 'validation_split': 0.,
-      'validation_split': 0.1,
-      'optimizer': Adam(
-              clipnorm=1e-2),
-    },
-
-    'model_params': {
-      # 'n_embed_dims': 100,
-      # 'n_embed_dims': 256,
-      'n_embed_dims': 128,
-      # 'n_hidden': 200,
-
-      # convolution
-      # 'nb_filters': 1000,
-      # * 4
-      # 'conv_activation': 'tanh',
-
-      # recurrent
-      # 'n_lstm_dims': 141,
-      'n_lstm_dims': 64,
-      # * 2
-
-      # 'initial_embed_weights':
-      #   np.load('./word2vec_100_dim.embeddings'),
-      'similarity_dropout': 0.5,
-    },
-
-    'similarity_params': {
-      # 'mode': 'gesd',
-      'mode': sim_type,
-      'gamma': 1,
-      'c': 1,
-      'd': 2,
-    }
-  }
+  conf = pickle.load(open('models/%s/conf' % model_dir, 'rb'))
 
   evaluator = EvaluatorEval(conf)
-
   ##### Define model ######
   model = AttentionModel(conf)
   optimizer = conf.get('training_params', dict()).get('optimizer', 'rmsprop')
@@ -198,8 +144,8 @@ if __name__ == '__main__':
 
   # train the model
   evaluator.load_epoch(model, epoch)
-  # output = evaluator.valid(model)
-  output = evaluator.predict(model)
+  output = evaluator.valid(model)
+  # output = evaluator.predict(model)
 
   # print(output)
 

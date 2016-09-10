@@ -39,7 +39,7 @@ class Evaluator:
     if not os.path.exists('models/%s' % self.conf.get('model_dir')):
       os.makedirs('models/%s' % self.conf.get('model_dir'))
     pickle.dump(self.conf, open('models/%s/conf' % self.conf.get(
-            'model_dir'), 'rb'))
+            'model_dir'), 'wb'))
 
   def save_epoch(self, model, epoch):
     if not os.path.exists('models/'):
@@ -174,6 +174,8 @@ class Evaluator:
 
     # val_loss = {'loss': 1., 'epoch': 0}
     val_ndcg = {'ndcg':0, 'epoch':0}
+
+    self.save_conf()
 
     for i in range(1, nb_epoch):
       # sample from all answers to get bad answers
