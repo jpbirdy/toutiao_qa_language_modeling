@@ -4,7 +4,7 @@ import os
 import pandas as pd
 import sys
 import random
-from time import strftime, gmtime, localtime
+from time import strftime, gmtime, localtime, sleep
 
 import pickle
 
@@ -36,16 +36,17 @@ class Evaluator:
   def save_conf(self):
     if not os.path.exists('models/'):
       os.makedirs('models/')
-    if not os.path.exists('models/%s' % self.conf.get('model_dir')):
-      os.makedirs('models/%s' % self.conf.get('model_dir'))
+    if not os.path.exists('models/%s/' % self.conf.get('model_dir')):
+      os.makedirs('models/%s/' % self.conf.get('model_dir'))
+    sleep(1)
     pickle.dump(self.conf, open('models/%s/conf' % self.conf.get(
             'model_dir'), 'wb'))
 
   def save_epoch(self, model, epoch):
     if not os.path.exists('models/'):
       os.makedirs('models/')
-    if not os.path.exists('models/%s' % self.conf.get('model_dir')):
-      os.makedirs('models/%s' % self.conf.get('model_dir'))
+    if not os.path.exists('models/%s/' % self.conf.get('model_dir')):
+      os.makedirs('models/%s/' % self.conf.get('model_dir'))
     model.save_weights('models/%s/weights_epoch_%d.h5' %
                        (self.conf.get('model_dir'), epoch), overwrite=True)
 
