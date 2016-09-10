@@ -16,10 +16,10 @@ setences = []
 
 import numpy as np
 
-setences.extend([list(np.array(x, dtype=str)) for x in question_info['character_seq'] if len(x)>0])
+setences.extend([list(np.array(x, dtype=str)) for x in question_info['words_seq'] if len(x)>0])
 setences.extend([list(np.array(x, dtype=str)) for x in user_info['user_desc_words_sec'] if len(x)>0])
 
-size = 100
+size = 50
 w2v = Word2Vec(setences, size=size, window=5,)
 
 #
