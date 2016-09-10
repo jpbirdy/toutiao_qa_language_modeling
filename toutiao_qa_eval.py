@@ -267,8 +267,8 @@ if __name__ == '__main__':
   print('model path is ', model_dir)
 
   conf = {
-    'question_len': 30,
-    'answer_len': 30,
+    'question_len': 20,
+    'answer_len': 20,
     # 'w2v_len': 256,
     'w2v_len': 50,
     # 'margin': 0.02,
