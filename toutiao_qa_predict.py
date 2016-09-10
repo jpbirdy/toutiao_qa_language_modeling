@@ -26,8 +26,6 @@ class EvaluatorEval(Evaluator):
     import pandas as pd
     valid_set = pd.read_csv('toutiao_qa_python/validate_nolabel.txt')
 
-    valid_set.sort()
-
     question_info = self.load('question_info.pkl')
     user_info = self.load('user_info.pkl')
 
