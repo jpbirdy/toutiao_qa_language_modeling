@@ -267,8 +267,8 @@ if __name__ == '__main__':
   print('model path is ', model_dir)
 
   conf = {
-    'question_len': 20,
-    'answer_len': 20,
+    'question_len': 30,
+    'answer_len': 30,
     # 'w2v_len': 256,
     'w2v_len': 50,
     # 'margin': 0.02,
@@ -288,7 +288,7 @@ if __name__ == '__main__':
       'validation_split': 0.1,
       'optimizer': Adam(
               clipnorm=1e-2),
-      'bad_answer_sample': 3,
+      'bad_answer_sample': 1,
     },
 
     'model_params': {
