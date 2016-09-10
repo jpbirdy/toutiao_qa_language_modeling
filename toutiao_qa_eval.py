@@ -270,7 +270,7 @@ if __name__ == '__main__':
     'question_len': 30,
     'answer_len': 30,
     # 'w2v_len': 256,
-    'w2v_len': 100,
+    'w2v_len': 50,
     # 'margin': 0.02,
     'margin': 0.05,
     # 'margin': 0.5,
