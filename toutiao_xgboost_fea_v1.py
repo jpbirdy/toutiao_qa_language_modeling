@@ -79,6 +79,8 @@ class Evaluator:
             0]])], self.user_info['user_tags'][test[1]].split('/'))
            for test in self.training_set.values]
 
+
+
     # questions = list()
     # answers = list()
 
@@ -97,28 +99,28 @@ class Evaluator:
     valid_qid = list()
     valid_uid = list()
     valid_answer = list()
-
-    for x in list(train_group):
-      question_id = x[0]
-      answer_info = x[1]
-      if valid_questions.__contains__(question_id):
-        for info in answer_info.values:
-          valid_qid.append(info[0])
-          valid_uid.append(info[1])
-          valid_answer.append(info[2])
-      else:
-        good_bad = [(g, b) for g in answer_info['user_id'][
-            answer_info.answer_flag == 1] for b in answer_info['user_id'][
-            answer_info.answer_flag == 0]]
-        for gb in good_bad:
-          question_ids.append(question_id)
-          good_answer_ids.append(gb[0])
-          bad_answer_ids.append(gb[1])
-          bad_sample = random.sample(all_users, bad_answer_sample)
-          for bad in bad_sample:
-            question_ids.append(question_id)
-            good_answer_ids.append(gb[0])
-            bad_answer_ids.append(bad)
+    #
+    # for x in list(train_group):
+    #   question_id = x[0]
+    #   answer_info = x[1]
+    #   if valid_questions.__contains__(question_id):
+    #     for info in answer_info.values:
+    #       valid_qid.append(info[0])
+    #       valid_uid.append(info[1])
+    #       valid_answer.append(info[2])
+    #   else:
+    #     good_bad = [(g, b) for g in answer_info['user_id'][
+    #         answer_info.answer_flag == 1] for b in answer_info['user_id'][
+    #         answer_info.answer_flag == 0]]
+    #     for gb in good_bad:
+    #       question_ids.append(question_id)
+    #       good_answer_ids.append(gb[0])
+    #       bad_answer_ids.append(gb[1])
+    #       bad_sample = random.sample(all_users, bad_answer_sample)
+    #       for bad in bad_sample:
+    #         question_ids.append(question_id)
+    #         good_answer_ids.append(gb[0])
+    #         bad_answer_ids.append(bad)
 
     sample = self.conf.get('sample')
     if sample > 0:
