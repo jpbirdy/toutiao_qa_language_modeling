@@ -33,6 +33,14 @@ class Evaluator:
 
   ##### Loading / saving #####
 
+  def save_conf(self):
+    if not os.path.exists('models/'):
+      os.makedirs('models/')
+    if not os.path.exists('models/%s' % self.conf.get('model_dir')):
+      os.makedirs('models/%s' % self.conf.get('model_dir'))
+    pickle.dump(self.conf, open('models/%s/conf' % self.conf.get(
+            'model_dir'), 'rb'))
+
   def save_epoch(self, model, epoch):
     if not os.path.exists('models/'):
       os.makedirs('models/')
@@ -199,7 +207,7 @@ class Evaluator:
 
       valid_ndcg = np.mean(scores)
       print('ndcg mean is %lf' % valid_ndcg)
-      if val_ndcg > val_ndcg['ndcg']:
+      if valid_ndcg > val_ndcg['ndcg']:
         val_ndcg = {'ndcg': valid_ndcg, 'epoch':i}
 
       print('Best: Ndcg = {}, Epoch = {}'.format(val_ndcg['ndcg'],
@@ -226,8 +234,8 @@ if __name__ == '__main__':
   print('model path is ', model_dir)
 
   conf = {
-    'question_len': 50,
-    'answer_len': 50,
+    'question_len': 30,
+    'answer_len': 30,
     'n_words': 37813,  # len(vocabulary) + 1
     # 'margin': 0.02,
     'margin': 0.05,
@@ -246,7 +254,7 @@ if __name__ == '__main__':
       'validation_split': 0.1,
       'optimizer': Adam(
               clipnorm=1e-2),
-      'bad_answer_sample': 3,
+      'bad_answer_sample': 1,
     },
 
     'model_params': {
@@ -284,9 +292,7 @@ if __name__ == '__main__':
   ##### Define model ######
   model = AttentionModel(conf)
   optimizer = conf.get('training_params', dict()).get('optimizer', 'rmsprop')
-  model.compile(optimizer=optimizer,
-                # metrics=['accuracy']
-                )
+  model.compile(optimizer=optimizer)
 
   best_loss = evaluator.train(model)
 
