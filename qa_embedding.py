@@ -21,7 +21,7 @@ setences.extend([list(np.array(x, dtype=str)) for x in user_info['user_desc_word
 
 size = 100
 
-w2v = Word2Vec(setences, size=size, window=10,)
+w2v = Word2Vec(setences, size=size, window=5,)
 
 #
 w2v.save('w2v_word_embending_%d.m' % size)
@@ -30,5 +30,19 @@ setences = []
 setences.extend([list(np.array(x, dtype=str)) for x in question_info['character_seq'] if len(x)>0])
 setences.extend([list(np.array(x, dtype=str)) for x in user_info['user_desc_characters_sec'] if len(x)>0])
 
-w2v.save('w2v_word_embending_%d.m' % size)
+w2v = Word2Vec(setences, size=size, window=10,)
+w2v.save('w2v_character_embending_%d.m' % size)
 
+setences = []
+setences.extend([x.split('/') for x in user_info['user_tags'] if len(
+        x)>0])
+
+setences.extend([str(x) for x in question_info['question_tag']])
+
+w2v = Word2Vec(setences, size=size, window=5,)
+w2v.save('w2v_tag_embending_%d.m' % size)
+
+good_sim = [w2v.n_similarity([str(question_info['question_tag'][test[0]])],
+                             user_info['user_tags'][test[1]].split('/')) for
+            test
+            in training_set.values]
