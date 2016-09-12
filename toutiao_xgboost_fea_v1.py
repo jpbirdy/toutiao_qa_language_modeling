@@ -2,19 +2,22 @@ from __future__ import print_function
 
 import os
 import pandas as pd
+import numpy as np
 import sys
 import random
 from time import strftime, gmtime, localtime, sleep
 
 import pickle
 
+from gensim import corpora, models, similarities
 from gensim.models import Word2Vec
+
+random.seed(42)
 
 
 class Evaluator:
   def __init__(self, conf=None):
     data_path = './toutiao_qa_python/pkl'
-    # sys.exit(1)
     self.path = data_path
     self.conf = dict() if conf is None else conf
     self.params = conf.get('training_params', dict())
@@ -27,13 +30,226 @@ class Evaluator:
     self.word_w2v = self.load_w2v('w2v_word_embending')
     self.character_w2v = self.load_w2v('w2v_character_embending')
 
-  ##### Resources #####
 
+    self.valid_set = None
+    self.train_set = None
+
+    self.split_valid_set()
+
+    self.tfidf = None
+    self.question_words_tfidf_feas = None
+    self.user_words_tfidf_feas = None
+    self.words_tfidf()
+
+    self.character_tfidf = None
+    self.question_characters_tfidf_feas = None
+    self.user_characters_tfidf_feas = None
+
+    self.characters_tfidf()
+
+
+  ##### Resources #####
   def load_w2v(self, name):
     return Word2Vec.load('%s_%d.m' % (name, self.w2v_len))
 
   def load(self, name):
     return pickle.load(open(os.path.join(self.path, name), 'rb'))
+
+  ##### Building train&valid data set #####
+  def split_valid_set(self):
+    split = self.params.get('validation_split', 0)
+    train_group = self.training_set.groupby('question_id')
+
+    questions = [x[0] for x in list(train_group)]
+    len_split = int(len(questions) * split)
+    valid_questions = random.sample(questions, len_split)
+    is_valid = lambda x: valid_questions.__contains__(x)
+    self.training_set['is_valid'] = self.training_set['question_id'].apply(
+            is_valid)
+
+    self.valid_set = self.training_set[self.training_set.is_valid == True]
+    self.train_set = self.training_set[self.training_set.is_valid == False]
+
+  ##### Words tfidf #####
+  def words_tfidf(self):
+    question_words = [np.array(x, dtype=np.str) for x in
+                               self.question_info['words_seq']]
+    user_words = [np.array(x, dtype=np.str) for x in
+                  self.user_info['user_desc_words_sec']]
+    words = np.concatenate((question_words, user_words), axis=0)
+    dictionary = corpora.Dictionary(words)
+    corpus = [dictionary.doc2bow(text) for text in words]
+    self.tfidf = models.TfidfModel(corpus)
+    question_words_tfidf = self.tfidf[[dictionary.doc2bow(text) for text in
+                             question_words]]
+    user_words_tfidf = self.tfidf[[dictionary.doc2bow(text) for text in
+                             user_words]]
+
+
+    get_mean = lambda x : np.array(x)[::,1].mean() if len(x) > 0 else 0.0
+    get_max = lambda x : np.array(x)[::,1].max() if len(x) > 0 else 0.0
+    get_min = lambda x : np.array(x)[::,1].min() if len(x) > 0 else 0.0
+
+    # (0:mean, 1:max, 2:min)
+    self.question_words_tfidf_feas = [(get_mean(x), get_max(x), get_min(x))
+                                      for x in
+                                      question_words_tfidf]
+    self.user_words_tfidf_feas = [(get_mean(x), get_max(x), get_min(x)) for x in
+                                      user_words_tfidf]
+
+  def characters_tfidf(self):
+    question_characters = [np.array(x, dtype=np.str) for x in
+                      self.question_info['character_seq']]
+
+    user_characters = [np.array(x, dtype=np.str) for x in
+                  self.user_info['user_desc_characters_sec']]
+    words = np.concatenate((question_characters, user_characters), axis=0)
+    dictionary = corpora.Dictionary(words)
+    corpus = [dictionary.doc2bow(text) for text in words]
+    self.character_tfidf = models.TfidfModel(corpus)
+    question_characters_tfidf = self.character_tfidf[[dictionary.doc2bow(text)
+                                                      for text in
+                                       question_characters]]
+    user_characters_tfidf = self.character_tfidf[[dictionary.doc2bow(text)
+                                                  for text in
+                                   user_characters]]
+
+    get_mean = lambda x: np.array(x)[::, 1].mean() if len(x) > 0 else 0.0
+    get_max = lambda x: np.array(x)[::, 1].max() if len(x) > 0 else 0.0
+    get_min = lambda x: np.array(x)[::, 1].min() if len(x) > 0 else 0.0
+
+    # (0:mean, 1:max, 2:min)
+    self.question_characters_tfidf_feas = [(get_mean(x), get_max(x), get_min(x))
+                                      for x in
+                                      question_characters_tfidf]
+    self.user_characters_tfidf_feas = [(get_mean(x), get_max(x), get_min(x))
+                                       for x in
+                                  user_characters_tfidf]
+
+  def deal_questions_feas(self):
+    # question_features
+    self.log('calcu question features')
+    self.log('question_words_num')
+    self.question_info['words_num'] = [len(x) for x in self.question_info[
+      'words_seq']]
+    self.log('characters_num')
+    self.question_info['characters_num'] = [len(x) for x in self.question_info[
+      'character_seq']]
+
+    self.log('tfidf')
+    self.question_info['words_tfidf_mean'] = \
+      [x[0] for x in self.question_words_tfidf_feas]
+    self.question_info['words_tfidf_max'] = \
+      [x[1] for x in self.question_words_tfidf_feas]
+    self.question_info['words_tfidf_min'] = \
+      [x[2] for x in self.question_words_tfidf_feas]
+
+    self.question_info['characters_tfidf_mean'] = \
+      [x[0] for x in self.question_characters_tfidf_feas]
+    self.question_info['characters_tfidf_max'] = \
+      [x[1] for x in self.question_characters_tfidf_feas]
+    self.question_info['characters_tfidf_min'] = \
+      [x[2] for x in self.question_characters_tfidf_feas]
+
+    self.log('question feas complete')
+
+
+  def deal_user_feas(self):
+    self.log('calcu user features')
+    self.user_info['tag_num'] = [len(str(x).split('/')) for x in
+                                 self.user_info['user_tags']]
+    self.log('user_words_num')
+    self.user_info['words_num'] = [len(x) for x in self.user_info[
+      'user_desc_words_sec']]
+    self.log('characters_num')
+    self.user_info['characters_num'] = [len(x) for x in self.user_info[
+      'user_desc_characters_sec']]
+
+    train_set_group = self.train_set.groupby('user_id')
+    user_reply_history = {}
+
+    self.log('calcu user reply history... It will take about 1 min')
+    for u in train_set_group:
+      user_id = u[0]
+      reply_num = len(u[1][u[1].answer_flag == 1])
+      ignore_num = len(u[1][u[1].answer_flag == 0])
+      total_num = len(u[1])
+      user_reply_history[user_id] = (reply_num, ignore_num, total_num,
+                                     reply_num*1.0/total_num,
+                                     ignore_num*1.0/total_num)
+
+    self.log('calcu finished, calcu user history feas')
+    get_user_reply = lambda x: user_reply_history[x][0] if \
+      user_reply_history.has_key(x) else 0
+    get_user_ignore = lambda x: user_reply_history[x][1] if \
+      user_reply_history.has_key(x) else 0
+    get_user_total = lambda x: user_reply_history[x][2] if \
+      user_reply_history.has_key(x) else 0
+    get_user_reply_rate = lambda x: user_reply_history[x][3] if \
+      user_reply_history.has_key(x) else 0.0
+    get_user_ignore_rate = lambda x: user_reply_history[x][4] if \
+      user_reply_history.has_key(x) else 0.0
+
+    self.user_info['user_id'] = self.user_info.index
+
+    self.user_info['reply_num'] = self.user_info['user_id'].apply(get_user_reply)
+    self.user_info['ignore_num'] = self.user_info['user_id'].apply(
+            get_user_ignore)
+    self.user_info['total_num'] = self.user_info['user_id'].apply(
+            get_user_total)
+
+    self.user_info['reply_rate'] = self.user_info['user_id'].apply(
+            get_user_reply_rate)
+    self.user_info['ignore_rate'] = self.user_info['user_id'].apply(
+            get_user_ignore_rate)
+
+    self.log('tfidf feas')
+
+    self.user_info['words_tfidf_mean'] = \
+      [x[0] for x in self.user_words_tfidf_feas]
+    self.user_info['words_tfidf_max'] = \
+      [x[1] for x in self.user_words_tfidf_feas]
+    self.user_info['words_tfidf_min'] = \
+      [x[2] for x in self.user_words_tfidf_feas]
+
+    self.user_info['characters_tfidf_mean'] = \
+      [x[0] for x in self.user_characters_tfidf_feas]
+    self.user_info['characters_tfidf_max'] = \
+      [x[1] for x in self.user_characters_tfidf_feas]
+    self.user_info['characters_tfidf_min'] = \
+      [x[2] for x in self.user_characters_tfidf_feas]
+
+    self.log('user feas complete')
+
+  def deal_question_user_feas(self):
+
+    self.log('start q2u features')
+
+    self.log('tag_w2v_sim fea')
+    self.train_set['tag_w2v_sim'] = \
+      [self.tag_w2v.n_similarity([str(self.question_info['question_tag'][test[
+        0]])], self.user_info['user_tags'][test[1]].split('/'))
+       for test in self.train_set.values]
+
+    self.log('words_w2v_sim fea')
+    self.train_set['words_w2v_sim'] = \
+      [self.word_w2v.n_similarity(
+              np.array(self.question_info['words_seq'][test[0]], dtype=str),
+              np.array(self.user_info['user_desc_words_sec'][test[1]],
+                       dtype=str))
+       for test in self.train_set.values]
+
+    self.log('characters_w2v_sim fea')
+    self.train_set['characters_w2v_sim'] = \
+      [self.character_w2v.n_similarity(
+              np.array(self.question_info['character_seq'][test[0]], dtype=str),
+              np.array(self.user_info['user_desc_characters_sec'][test[1]],
+                       dtype=str))
+       for test in self.train_set.values]
+
+  def building_features(self):
+    pass
+
 
   ##### Loading / saving #####
 
@@ -67,70 +283,25 @@ class Evaluator:
   def print_time():
     print(strftime('%Y-%m-%d %H:%M:%S :: ', localtime()), end='')
 
+
+  def log(self, str):
+    self.print_time()
+    print(str)
+
+
   def train(self, model):
     save_every = self.params.get('save_every', None)
     batch_size = self.params.get('batch_size', 128)
     nb_epoch = self.params.get('nb_epoch', 10)
-    split = self.params.get('validation_split', 0)
 
-
+    # tag w2v sim
     self.training_set['tag_w2v_sim'] =\
           [self.tag_w2v.n_similarity([str(self.question_info['question_tag'][test[
             0]])], self.user_info['user_tags'][test[1]].split('/'))
            for test in self.training_set.values]
-
-
-
-    # questions = list()
-    # answers = list()
-
-    train_group = self.training_set.groupby('question_id')
-
-    all_users = list(self.user_info.index)
-
-    question_ids = list()
-    good_answer_ids = list()
-    bad_answer_ids = list()
-
-    questions = [x[0] for x in list(train_group)]
-    len_split = int(len(questions) * split)
-    valid_questions = random.sample(questions, len_split)
-
-    valid_qid = list()
-    valid_uid = list()
-    valid_answer = list()
     #
-    # for x in list(train_group):
-    #   question_id = x[0]
-    #   answer_info = x[1]
-    #   if valid_questions.__contains__(question_id):
-    #     for info in answer_info.values:
-    #       valid_qid.append(info[0])
-    #       valid_uid.append(info[1])
-    #       valid_answer.append(info[2])
-    #   else:
-    #     good_bad = [(g, b) for g in answer_info['user_id'][
-    #         answer_info.answer_flag == 1] for b in answer_info['user_id'][
-    #         answer_info.answer_flag == 0]]
-    #     for gb in good_bad:
-    #       question_ids.append(question_id)
-    #       good_answer_ids.append(gb[0])
-    #       bad_answer_ids.append(gb[1])
-    #       bad_sample = random.sample(all_users, bad_answer_sample)
-    #       for bad in bad_sample:
-    #         question_ids.append(question_id)
-    #         good_answer_ids.append(gb[0])
-    #         bad_answer_ids.append(bad)
 
-    sample = self.conf.get('sample')
-    if sample > 0:
-      print('Selected sample, num is %d' % sample)
-      sample = random.sample(range(len(question_ids)), sample)
-      question_ids = [question_ids[s] for s in sample]
-      good_answer_ids = [good_answer_ids[s] for s in sample]
-      bad_answer_ids = [bad_answer_ids[s] for s in sample]
 
-    # val_loss = {'loss': 1., 'epoch': 0}
     val_ndcg = {'ndcg':0, 'epoch':0}
 
     self.save_conf()
@@ -140,31 +311,6 @@ class Evaluator:
       print('Epoch %d :: ' % i, end='')
       self.print_time()
 
-      # valid_set['predict'] = [x[0][0] for x in predict]
-      # valid_group = valid_set.groupby('qid')
-
-      # scores = list()
-
-      # for x in list(valid_group):
-      #   answer_info = x[1].sort('predict', ascending=False)
-      #   predict = [answer_info['predict'][x] * answer_info['answer_flag'][x]
-      #              for x in answer_info.index]
-      #   from ndcg import ndcg_at_k
-      #   scores.append(
-      #     ndcg_at_k(predict, 5) * 0.5 + ndcg_at_k(predict, 10) * 0.5)
-      #
-      # valid_ndcg = np.mean(scores)
-      # print('ndcg mean is %lf' % valid_ndcg)
-      # if valid_ndcg > val_ndcg['ndcg']:
-      #   val_ndcg = {'ndcg': valid_ndcg, 'epoch':i}
-      #
-      # print('Best: Ndcg = {}, Epoch = {}'.format(val_ndcg['ndcg'],
-      #                                            val_ndcg['epoch']))
-
-      # if hist.history['val_loss'][0] < val_loss['loss']:
-      #   val_loss = {'loss': hist.history['val_loss'][0], 'epoch': i}
-      # print('Best: Loss = {}, Epoch = {}'.format(val_loss['loss'],
-      #                                            val_loss['epoch']))
 
       if save_every is not None and i % save_every == 0:
         self.save_epoch(model, i)
@@ -175,7 +321,4 @@ class Evaluator:
 
 
 
-good_sim = [w2v.n_similarity([str(question_info['question_tag'][test[0]])],
-                             user_info['user_tags'][test[1]].split('/')) for
-            test
-            in training_set.values]
+
