@@ -142,8 +142,8 @@ class EvaluatorEval(Evaluator):
 if __name__ == '__main__':
   import numpy as np
 
-  model_dir = '2016-09-09 16:42:37'
-  epoch = 7
+  model_dir = '2016-09-10 17:11:20'
+  epoch = 16
   conf = pickle.load(open('models/%s/conf' % model_dir, 'rb'))
 
   evaluator = EvaluatorEval(conf)
@@ -152,7 +152,7 @@ if __name__ == '__main__':
   optimizer = conf.get('training_params', dict()).get('optimizer', 'rmsprop')
   model.compile(optimizer=optimizer)
   evaluator.load_epoch(model, epoch)
-  # output = evaluator.valid(model)
+  output = evaluator.valid(model)
   output = evaluator.predict(model)
 
   # print(output)
