@@ -307,7 +307,6 @@ class Evaluator:
     self.save_conf()
 
     for i in range(1, nb_epoch):
-      # sample from all answers to get bad answers
       print('Epoch %d :: ' % i, end='')
       self.print_time()
 
