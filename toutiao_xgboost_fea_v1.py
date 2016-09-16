@@ -247,7 +247,51 @@ class Evaluator:
                        dtype=str))
        for test in self.train_set.values]
 
+    user_features = {
+      'user_tag_num' : lambda x : self.user_info['tag_num'][x],
+      'user_words_num' : lambda x : self.user_info['words_num'][x],
+      'user_characters_num' : lambda x : self.user_info['characters_num'][x],
+      'user_reply_num' : lambda x: self.user_info['reply_num'][x],
+      'user_ignore_num' : lambda x : self.user_info['ignore_num'][x],
+      'user_total_num' : lambda x : self.user_info['total_num'][x],
+      'user_reply_rate' : lambda x : self.user_info['reply_rate'][x],
+      'user_ignore_rate' : lambda x : self.user_info['ignore_rate'][x],
+      'user_characters_tfidf_mean' : lambda x : self.user_info[
+        'characters_tfidf_mean'][x],
+      'user_characters_tfidf_max' : lambda x : self.user_info[
+        'characters_tfidf_max'][x],
+      'user_characters_tfidf_min' : lambda x : self.user_info[
+        'characters_tfidf_min'][x],
+    }
+
+    for key, func in user_features.items():
+      self.train_set[key] = self.train_set['user_id'].apply(func)
+
+    question_features = {
+      'question_point_num': lambda x: self.user_info['point_num'][x],
+      'question_reply_num': lambda x: self.user_info['reply_num'][x],
+      'question_good_reply_num': lambda x: self.user_info['good_reply_num'][x],
+      'question_words_num': lambda x: self.user_info['words_num'][x],
+      'question_characters_num': lambda x: self.user_info['characters_num'][x],
+      'question_words_tfidf_mean': lambda x: self.user_info['words_tfidf_mean'][x],
+      'question_words_tfidf_max': lambda x: self.user_info['words_tfidf_max'][x],
+      'question_words_tfidf_min': lambda x: self.user_info['words_tfidf_min'][x],
+      'question_characters_tfidf_mean': lambda x: self.user_info[
+        'characters_tfidf_mean'][x],
+      'question_characters_tfidf_max': lambda x: self.user_info[
+        'characters_tfidf_max'][x],
+      'question_characters_tfidf_min': lambda x: self.user_info[
+        'characters_tfidf_min'][x],
+    }
+
+    for key, func in question_features.items():
+      self.train_set[key] = self.train_set['question_id'].apply(func)
+
   def building_features(self):
+    self.log('start building features')
+    self.deal_questions_feas()
+    self.deal_user_feas()
+    self.deal_question_user_feas()
     pass
 
 
@@ -288,31 +332,44 @@ class Evaluator:
     self.print_time()
     print(str)
 
+  def evalerror(preds, dtrain):
+    labels = dtrain.get_label()
+    labels_x = []
+    for i in range(0, len(labels)):
+      if labels[i] == 0.0:
+        labels_x.append(1.0)
+      else:
+        labels_x.append(labels[i])
+      if preds[i] <= 1.0:
+        preds[i] = 1.0
+    grad = abs(preds - labels_x) * 1.0 / labels_x
+    return 'error', float(sum(grad)) / len(grad)
 
-  def train(self, model):
+  def train(self):
     save_every = self.params.get('save_every', None)
     batch_size = self.params.get('batch_size', 128)
     nb_epoch = self.params.get('nb_epoch', 10)
-
-    # tag w2v sim
-    self.training_set['tag_w2v_sim'] =\
-          [self.tag_w2v.n_similarity([str(self.question_info['question_tag'][test[
-            0]])], self.user_info['user_tags'][test[1]].split('/'))
-           for test in self.training_set.values]
     #
+    self.building_features()
+    import xgboost as xgb
+    # dtrain = xgb.DMatrix(data=self.train_set, label='answer_flag' ,
+    #                      feature_names=[''])
 
+    # bst = xgb.train(self.params['xgb_param'], dtrain, num_round,
+                    # obj=mapeobj,
+                    # feval=evalerror
+                    # )
 
     val_ndcg = {'ndcg':0, 'epoch':0}
 
-    self.save_conf()
-
-    for i in range(1, nb_epoch):
-      print('Epoch %d :: ' % i, end='')
-      self.print_time()
-
-
-      if save_every is not None and i % save_every == 0:
-        self.save_epoch(model, i)
+    # self.save_conf()
+    #
+    # for i in range(1, nb_epoch):
+    #   print('Epoch %d :: ' % i, end='')
+    #   self.print_time()
+    #
+    #   if save_every is not None and i % save_every == 0:
+    #     self.save_epoch(model, i)
 
     # return val_loss
     return val_ndcg
@@ -320,4 +377,41 @@ class Evaluator:
 
 
 
+if __name__ == '__main__':
+  import numpy as np
+  try:
+    model_dir = sys.argv[1]
+  except:
+    model_dir = '.'
 
+  print('model path is ', model_dir)
+
+  conf = {
+    'sample': 0,
+    'model_dir': model_dir,
+
+    'training_params': {
+      'save_every': 1,
+      'batch_size': 256,
+      'nb_epoch': 50,
+      'validation_split': 0.1,
+    },
+    'xgb_param' : {'max_depth': 6,
+             'eta': 0.001,
+             'silent': 1,
+             # 'gamma': 0,
+             'min_child_weight': 5,
+             # 'objective': 'reg:linear',
+             'objective': 'rank:pairwise',
+             'subsample': 0.3,
+             'booster': 'gbtree',
+             # 'eval_metric': ['ndcg@n'],
+             # 'booster': 'gblinear',
+             # 'alpha': 0.001, 'lambda': 1,
+             # 'subsample': 0.5
+             }
+
+  }
+
+  evaluator = Evaluator(conf)
+  evaluator.train()
