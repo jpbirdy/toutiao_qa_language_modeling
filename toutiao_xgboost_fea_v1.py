@@ -25,6 +25,7 @@ class Evaluator:
     self.training_set = self.load('invited_info_train.pkl')
     self.question_info = self.load('question_info.pkl')
     self.user_info = self.load('user_info.pkl')
+
     self.w2v_len = conf.get('w2v_len', 100)
     self.tag_w2v = self.load_w2v('w2v_tag_embending')
     self.word_w2v = self.load_w2v('w2v_word_embending')
@@ -32,7 +33,9 @@ class Evaluator:
 
 
     self.valid_set = None
+    self.valid_set_group = None
     self.train_set = None
+    self.train_set_group = None
 
     self.split_valid_set()
 
@@ -46,6 +49,11 @@ class Evaluator:
     self.user_characters_tfidf_feas = None
 
     self.characters_tfidf()
+
+    #   submit result
+    import pandas as pd
+    self.submit_valid_set = pd.read_csv(
+            'toutiao_qa_python/validate_nolabel.txt')
 
 
   ##### Resources #####
@@ -230,6 +238,20 @@ class Evaluator:
       [self.tag_w2v.n_similarity([str(self.question_info['question_tag'][test[
         0]])], self.user_info['user_tags'][test[1]].split('/'))
        for test in self.train_set.values]
+    # remove nan
+    self.train_set['tag_w2v_sim'] = [x if type(x) == np.float64 else 0.0 for x
+                                       in \
+                                       self.train_set['tag_w2v_sim']]
+
+
+    self.valid_set['tag_w2v_sim'] = \
+      [self.tag_w2v.n_similarity([str(self.question_info['question_tag'][test[
+        0]])], self.user_info['user_tags'][test[1]].split('/'))
+       for test in self.valid_set.values]
+    # remove nan
+    self.valid_set['tag_w2v_sim'] = [x if type(x) == np.float64 else 0.0 for x
+                                     in \
+                                     self.valid_set['tag_w2v_sim']]
 
     self.log('words_w2v_sim fea')
     self.train_set['words_w2v_sim'] = \
@@ -238,6 +260,21 @@ class Evaluator:
               np.array(self.user_info['user_desc_words_sec'][test[1]],
                        dtype=str))
        for test in self.train_set.values]
+    self.train_set['words_w2v_sim'] = [x if type(x) == np.float64 else 0.0 for x
+                                     in \
+                                     self.train_set['words_w2v_sim']]
+
+
+    self.valid_set['words_w2v_sim'] = \
+      [self.word_w2v.n_similarity(
+              np.array(self.question_info['words_seq'][test[0]], dtype=str),
+              np.array(self.user_info['user_desc_words_sec'][test[1]],
+                       dtype=str))
+       for test in self.valid_set.values]
+    self.valid_set['words_w2v_sim'] = [x if type(x) == np.float64 else 0.0 for x
+                                       in \
+                                       self.valid_set['words_w2v_sim']]
+
 
     self.log('characters_w2v_sim fea')
     self.train_set['characters_w2v_sim'] = \
@@ -246,6 +283,21 @@ class Evaluator:
               np.array(self.user_info['user_desc_characters_sec'][test[1]],
                        dtype=str))
        for test in self.train_set.values]
+    self.train_set['characters_w2v_sim'] = [x if type(x) == np.float64 else 0.0 for x
+                                       in \
+                                       self.train_set['characters_w2v_sim']]
+
+    self.valid_set['characters_w2v_sim'] = \
+      [self.character_w2v.n_similarity(
+              np.array(self.question_info['character_seq'][test[0]], dtype=str),
+              np.array(self.user_info['user_desc_characters_sec'][test[1]],
+                       dtype=str))
+       for test in self.valid_set.values]
+    self.valid_set['characters_w2v_sim'] = [x if type(x) == np.float64 else 0.0
+                                            for x
+                                            in \
+                                            self.valid_set[
+                                              'characters_w2v_sim']]
 
     user_features = {
       'user_tag_num' : lambda x : self.user_info['tag_num'][x],
@@ -267,32 +319,88 @@ class Evaluator:
     for key, func in user_features.items():
       self.train_set[key] = self.train_set['user_id'].apply(func)
 
+    for key, func in user_features.items():
+      self.valid_set[key] = self.valid_set['user_id'].apply(func)
+
     question_features = {
-      'question_point_num': lambda x: self.user_info['point_num'][x],
-      'question_reply_num': lambda x: self.user_info['reply_num'][x],
-      'question_good_reply_num': lambda x: self.user_info['good_reply_num'][x],
-      'question_words_num': lambda x: self.user_info['words_num'][x],
-      'question_characters_num': lambda x: self.user_info['characters_num'][x],
-      'question_words_tfidf_mean': lambda x: self.user_info['words_tfidf_mean'][x],
-      'question_words_tfidf_max': lambda x: self.user_info['words_tfidf_max'][x],
-      'question_words_tfidf_min': lambda x: self.user_info['words_tfidf_min'][x],
-      'question_characters_tfidf_mean': lambda x: self.user_info[
+      'question_point_num': lambda x: self.question_info['point_num'][x],
+      'question_reply_num': lambda x: self.question_info['reply_num'][x],
+      'question_good_reply_num': lambda x: self.question_info['good_reply_num'][x],
+      'question_words_num': lambda x: self.question_info['words_num'][x],
+      'question_characters_num': lambda x: self.question_info['characters_num'][x],
+      'question_words_tfidf_mean': lambda x: self.question_info['words_tfidf_mean'][x],
+      'question_words_tfidf_max': lambda x: self.question_info['words_tfidf_max'][x],
+      'question_words_tfidf_min': lambda x: self.question_info['words_tfidf_min'][x],
+      'question_characters_tfidf_mean': lambda x: self.question_info[
         'characters_tfidf_mean'][x],
-      'question_characters_tfidf_max': lambda x: self.user_info[
+      'question_characters_tfidf_max': lambda x: self.question_info[
         'characters_tfidf_max'][x],
-      'question_characters_tfidf_min': lambda x: self.user_info[
+      'question_characters_tfidf_min': lambda x: self.question_info[
         'characters_tfidf_min'][x],
     }
 
     for key, func in question_features.items():
       self.train_set[key] = self.train_set['question_id'].apply(func)
 
+    for key, func in question_features.items():
+      self.valid_set[key] = self.valid_set['question_id'].apply(func)
+
+    self.train_set = self.train_set.sort_values('question_id')
+    self.valid_set = self.valid_set.sort_values('question_id')
+    self.train_set_group = self.train_set.groupby('question_id').size()
+    self.valid_set_group = self.valid_set.groupby('question_id').size()
+
+
+    # online submit set
+    self.submit_valid_set['tag_w2v_sim'] = \
+      [self.tag_w2v.n_similarity([str(self.question_info['question_tag'][test[
+        0]])], self.user_info['user_tags'][test[1]].split('/'))
+       for test in self.submit_valid_set.values]
+    # remove nan
+    self.submit_valid_set['tag_w2v_sim'] = [x if type(x) == np.float64 else 0.0
+                                            for x
+                                            in \
+                                            self.submit_valid_set[
+                                              'tag_w2v_sim']]
+
+    self.submit_valid_set['words_w2v_sim'] = \
+      [self.word_w2v.n_similarity(
+              np.array(self.question_info['words_seq'][test[0]], dtype=str),
+              np.array(self.user_info['user_desc_words_sec'][test[1]],
+                       dtype=str))
+       for test in self.submit_valid_set.values]
+    self.submit_valid_set['words_w2v_sim'] = [
+      x if type(x) == np.float64 else 0.0 for x
+      in \
+      self.submit_valid_set['words_w2v_sim']]
+
+    self.submit_valid_set['characters_w2v_sim'] = \
+      [self.character_w2v.n_similarity(
+              np.array(self.question_info['character_seq'][test[0]], dtype=str),
+              np.array(self.user_info['user_desc_characters_sec'][test[1]],
+                       dtype=str))
+       for test in self.submit_valid_set.values]
+    self.submit_valid_set['characters_w2v_sim'] = [
+      x if type(x) == np.float64 else 0.0
+      for x
+      in \
+      self.submit_valid_set[
+        'characters_w2v_sim']]
+    # for key, func in question_features.items():
+    #   self.submit_valid_set[key] = self.submit_valid_set['qid'].apply(func)
+
+    for key, func in user_features.items():
+      self.submit_valid_set[key] = self.submit_valid_set['uid'].apply(func)
+
+    for key, func in question_features.items():
+      self.submit_valid_set[key] = self.submit_valid_set['qid'].apply(func)
+
   def building_features(self):
     self.log('start building features')
     self.deal_questions_feas()
     self.deal_user_feas()
     self.deal_question_user_feas()
-    pass
+
 
 
   ##### Loading / saving #####
@@ -332,47 +440,60 @@ class Evaluator:
     self.print_time()
     print(str)
 
-  def evalerror(preds, dtrain):
-    labels = dtrain.get_label()
-    labels_x = []
-    for i in range(0, len(labels)):
-      if labels[i] == 0.0:
-        labels_x.append(1.0)
-      else:
-        labels_x.append(labels[i])
-      if preds[i] <= 1.0:
-        preds[i] = 1.0
-    grad = abs(preds - labels_x) * 1.0 / labels_x
-    return 'error', float(sum(grad)) / len(grad)
-
   def train(self):
-    save_every = self.params.get('save_every', None)
-    batch_size = self.params.get('batch_size', 128)
-    nb_epoch = self.params.get('nb_epoch', 10)
+    nb_epoch = self.params.get('nb_epoch', None)
     #
     self.building_features()
     import xgboost as xgb
-    # dtrain = xgb.DMatrix(data=self.train_set, label='answer_flag' ,
-    #                      feature_names=[''])
 
-    # bst = xgb.train(self.params['xgb_param'], dtrain, num_round,
+    label = 'answer_flag'
+    features = list(self.train_set.keys())
+    features.remove('question_id')
+    features.remove('user_id')
+    features.remove('answer_flag')
+    features.remove('is_valid')
+
+    train = self.train_set.drop(['question_id', 'user_id', 'answer_flag',
+                                 'is_valid'], axis=1)
+    valid = self.valid_set.drop(['question_id', 'user_id', 'answer_flag',
+                                 'is_valid'], axis=1)
+
+    online_valid = self.submit_valid_set.drop(['qid', 'uid', 'label'], axis=1)
+
+    dtrain = xgb.DMatrix(data=train, label=self.train_set[label])
+    dvalid = xgb.DMatrix(data=valid, label=self.valid_set[label])
+
+    dsubmit = xgb.DMatrix(data=online_valid)
+
+    # only use for ranking
+    dtrain.set_group(list(self.train_set_group))
+    dvalid.set_group(list(self.valid_set_group))
+
+    watchlist = [(dtrain, 'train'),
+                 (dvalid, 'valid')]
+
+    bst = xgb.train(self.conf['xgb_param'], dtrain, nb_epoch, watchlist ,
                     # obj=mapeobj,
                     # feval=evalerror
-                    # )
+                    )
 
-    val_ndcg = {'ndcg':0, 'epoch':0}
-
-    # self.save_conf()
+    predict = bst.predict(dsubmit, ntree_limit=bst.best_iteration)
+    output = []
+    for i in self.submit_valid_set.index:
+      output.append([self.submit_valid_set['qid'][i],
+                     self.submit_valid_set['uid'][i],
+                     predict[i]])
     #
-    # for i in range(1, nb_epoch):
-    #   print('Epoch %d :: ' % i, end='')
-    #   self.print_time()
+    import csv
     #
-    #   if save_every is not None and i % save_every == 0:
-    #     self.save_epoch(model, i)
+    output_file = open('output/valid.csv', 'w')
+    writer = csv.writer(output_file)
+    writer.writerow(['qid', 'uid', 'label'])
+    for x in output:
+      writer.writerow([x[0], x[1], x[2]])
 
-    # return val_loss
-    return val_ndcg
+    output_file.close()
+
 
 
 
@@ -393,7 +514,7 @@ if __name__ == '__main__':
     'training_params': {
       'save_every': 1,
       'batch_size': 256,
-      'nb_epoch': 50,
+      'nb_epoch': 200,
       'validation_split': 0.1,
     },
     'xgb_param' : {'max_depth': 6,
@@ -403,9 +524,13 @@ if __name__ == '__main__':
              'min_child_weight': 5,
              # 'objective': 'reg:linear',
              'objective': 'rank:pairwise',
+             # 'objective': 'binary:logistic',
+             # 'num_class' : 2,
              'subsample': 0.3,
              'booster': 'gbtree',
-             # 'eval_metric': ['ndcg@n'],
+             'eval_metric': ['ndcg@2', 'ndcg@5', 'ndcg@10'],
+             'save_period': 10,
+             'model_dir' :  'models/%s/' % model_dir,
              # 'booster': 'gblinear',
              # 'alpha': 0.001, 'lambda': 1,
              # 'subsample': 0.5

@@ -201,7 +201,7 @@ class Evaluator:
 
       for x in list(valid_group):
         # question_id = x[0]
-        answer_info = x[1].sort('predict', ascending=False)
+        answer_info = x[1].sort_values('predict', ascending=False)
         predict = [answer_info['predict'][x] * answer_info['answer_flag'][x]
                    for x in answer_info.index]
         from ndcg import ndcg_at_k
