@@ -1,3 +1,4 @@
+# coding=utf-8
 from __future__ import print_function
 
 import os
@@ -9,10 +10,27 @@ from time import strftime, gmtime, localtime, sleep
 
 import pickle
 
-from gensim import corpora, models, similarities
-from gensim.models import Word2Vec
 
+import xgboost as xgb
+from xgboost import DMatrix
+from ndcg import ndcg_at_k
 random.seed(42)
+
+
+class XGMatrix(DMatrix):
+  def __init__(self, data, label=None, missing=None,
+                 weight=None, silent=False,
+                 feature_names=None, feature_types=None):
+    DMatrix.__init__(self, data, label, missing, weight, silent,
+                 feature_names, feature_types)
+    self.group = None
+
+  def set_group(self, group):
+    super(XGMatrix, self).set_group(group)
+    self.group = group
+
+  def get_group(self):
+    return self.group
 
 
 class Evaluator:
@@ -42,13 +60,14 @@ class Evaluator:
     self.tfidf = None
     self.question_words_tfidf_feas = None
     self.user_words_tfidf_feas = None
-    self.words_tfidf()
+
 
     self.character_tfidf = None
     self.question_characters_tfidf_feas = None
     self.user_characters_tfidf_feas = None
 
-    self.characters_tfidf()
+    self.bst = None
+
 
     #   submit result
     import pandas as pd
@@ -58,10 +77,14 @@ class Evaluator:
 
   ##### Resources #####
   def load_w2v(self, name):
+    from gensim.models import Word2Vec
     return Word2Vec.load('%s_%d.m' % (name, self.w2v_len))
 
   def load(self, name):
     return pickle.load(open(os.path.join(self.path, name), 'rb'))
+
+  def load_feature(self, name):
+    return pickle.load(open(name, 'rb'))
 
   ##### Building train&valid data set #####
   def split_valid_set(self):
@@ -80,6 +103,7 @@ class Evaluator:
 
   ##### Words tfidf #####
   def words_tfidf(self):
+    from gensim import corpora, models, similarities
     question_words = [np.array(x, dtype=np.str) for x in
                                self.question_info['words_seq']]
     user_words = [np.array(x, dtype=np.str) for x in
@@ -106,6 +130,7 @@ class Evaluator:
                                       user_words_tfidf]
 
   def characters_tfidf(self):
+    from gensim import corpora, models, similarities
     question_characters = [np.array(x, dtype=np.str) for x in
                       self.question_info['character_seq']]
 
@@ -397,6 +422,8 @@ class Evaluator:
 
   def building_features(self):
     self.log('start building features')
+    self.words_tfidf()
+    self.characters_tfidf()
     self.deal_questions_feas()
     self.deal_user_feas()
     self.deal_question_user_feas()
@@ -405,29 +432,39 @@ class Evaluator:
 
   ##### Loading / saving #####
 
-  def save_conf(self):
-    if not os.path.exists('models/'):
-      os.makedirs('models/')
-    if not os.path.exists('models/%s/' % self.conf.get('model_dir')):
-      os.makedirs('models/%s/' % self.conf.get('model_dir'))
+  def save_features(self):
+    if not os.path.exists('features/'):
+      os.makedirs('features/')
+    if not os.path.exists('features/%s/' % self.conf.get('version')):
+      os.makedirs('features/%s/' % self.conf.get('version'))
     sleep(1)
-    pickle.dump(self.conf, open('models/%s/conf' % self.conf.get(
-            'model_dir'), 'wb'))
+    pickle.dump(self.train_set, open('features/%s/train_set.pkl' %
+                                     self.conf.get('version'), 'wb'))
+    pickle.dump(self.train_set_group, open('features/%s/train_set_group.pkl' %
+                                     self.conf.get('version'), 'wb'))
+    pickle.dump(self.valid_set, open('features/%s/valid_set.pkl' %
+                                           self.conf.get('version'), 'wb'))
+    pickle.dump(self.valid_set_group, open('features/%s/valid_set_group.pkl' %
+                                     self.conf.get('version'), 'wb'))
+    pickle.dump(self.submit_valid_set, open('features/%s/submit_valid_set.pkl' %
+                                           self.conf.get('version'), 'wb'))
 
-  def save_epoch(self, model, epoch):
-    if not os.path.exists('models/'):
-      os.makedirs('models/')
-    if not os.path.exists('models/%s/' % self.conf.get('model_dir')):
-      os.makedirs('models/%s/' % self.conf.get('model_dir'))
-    model.save_weights('models/%s/weights_epoch_%d.h5' %
-                       (self.conf.get('model_dir'), epoch), overwrite=True)
+  def load_features(self):
+    if os.path.exists('features/%s/' % self.conf.get('version')):
+      self.train_set = self.load_feature('features/%s/train_set.pkl' %
+                                         self.conf.get('version'))
+      self.train_set_group = self.load_feature('features/%s/train_set_group.pkl' %
+                                          self.conf.get('version'))
+      self.valid_set = self.load_feature('features/%s/valid_set.pkl' %
+                                               self.conf.get('version'))
+      self.valid_set_group = self.load_feature('features/%s/valid_set_group.pkl' %
+                                         self.conf.get('version'))
+      self.submit_valid_set = self.load_feature('features/%s/submit_valid_set.pkl' %
+                                         self.conf.get('version'))
 
-  def load_epoch(self, model, epoch):
-    assert os.path.exists('models/%s/weights_epoch_%d.h5' %
-                          (self.conf.get('model_dir'), epoch)), \
-      'Weights at epoch %d not found' % epoch
-    model.load_weights('models/%s/weights_epoch_%d.h5' %
-                          (self.conf.get('model_dir'), epoch))
+      return True
+    else :
+      return False
 
   ##### Training #####
 
@@ -440,11 +477,31 @@ class Evaluator:
     self.print_time()
     print(str)
 
+  def ndcgerror(self, preds, dtrain):
+    assert isinstance(dtrain, XGMatrix)
+    labels = dtrain.get_label()
+    group = dtrain.get_group()
+
+    offset = 0
+    scores = list()
+    for size in group:
+      p = preds[offset:offset+size]
+      l = labels[offset:offset+size]
+      offset += size
+
+      rec_result = [(p[i], l[i]) for i in range(size)]
+      rec_result = sorted(rec_result, key=lambda x : x[0], reverse=True)
+      predict = [x[0] * x[1] if x[0] > 0 else 0.0 for x in rec_result]
+      scores.append(ndcg_at_k(predict, 5) * 0.5 + ndcg_at_k(predict, 10) * 0.5)
+    return 'ndcg_error', np.mean(scores)
+
   def train(self):
     nb_epoch = self.params.get('nb_epoch', None)
     #
-    self.building_features()
-    import xgboost as xgb
+    if not self.load_features():
+      self.building_features()
+    else:
+      self.log('loadding features from pickle')
 
     label = 'answer_flag'
     features = list(self.train_set.keys())
@@ -460,10 +517,10 @@ class Evaluator:
 
     online_valid = self.submit_valid_set.drop(['qid', 'uid', 'label'], axis=1)
 
-    dtrain = xgb.DMatrix(data=train, label=self.train_set[label])
-    dvalid = xgb.DMatrix(data=valid, label=self.valid_set[label])
+    dtrain = XGMatrix(data=train, label=self.train_set[label])
+    dvalid = XGMatrix(data=valid, label=self.valid_set[label])
 
-    dsubmit = xgb.DMatrix(data=online_valid)
+    dsubmit = XGMatrix(data=online_valid)
 
     # only use for ranking
     dtrain.set_group(list(self.train_set_group))
@@ -472,12 +529,25 @@ class Evaluator:
     watchlist = [(dtrain, 'train'),
                  (dvalid, 'valid')]
 
-    bst = xgb.train(self.conf['xgb_param'], dtrain, nb_epoch, watchlist ,
-                    # obj=mapeobj,
-                    # feval=evalerror
+    self.bst = xgb.train(self.conf['xgb_param'], dtrain, nb_epoch, watchlist ,
+                    early_stopping_rounds=500,
+                    feval=self.ndcgerror
                     )
 
-    predict = bst.predict(dsubmit, ntree_limit=bst.best_iteration)
+    print('best iteration is ', self.bst.best_iteration)
+
+    # total_merge_data = self.train_set.append(self.valid_set)
+    # total_group = total_merge_data.groupby('question_id').size()
+    # dtotal = XGMatrix(data=total_merge_data, label=total_merge_data[label])
+    # dtotal.set_group(total_group)
+    #
+    # watchlist = [(dtotal, 'train')]
+    #
+    # self.log('start total data training')
+    # bst = xgb.train(self.conf['xgb_param'], dtrain, bst.best_iteration,
+    #                 watchlist, feval=self.ndcgerror)
+
+    predict = self.bst.predict(dsubmit, ntree_limit=self.bst.best_iteration)
     output = []
     for i in self.submit_valid_set.index:
       output.append([self.submit_valid_set['qid'][i],
@@ -496,25 +566,22 @@ class Evaluator:
 
 
 
-
-
 if __name__ == '__main__':
   import numpy as np
   try:
-    model_dir = sys.argv[1]
+    version = sys.argv[1]
   except:
-    model_dir = '.'
+    version = '1'
 
-  print('model path is ', model_dir)
 
   conf = {
     'sample': 0,
-    'model_dir': model_dir,
+    'version': version,
 
     'training_params': {
       'save_every': 1,
       'batch_size': 256,
-      'nb_epoch': 200,
+      'nb_epoch': 5000,
       'validation_split': 0.1,
     },
     'xgb_param' : {'max_depth': 6,
@@ -526,17 +593,19 @@ if __name__ == '__main__':
              'objective': 'rank:pairwise',
              # 'objective': 'binary:logistic',
              # 'num_class' : 2,
-             'subsample': 0.3,
+             'subsample': 0.5,
              'booster': 'gbtree',
-             'eval_metric': ['ndcg@2', 'ndcg@5', 'ndcg@10'],
-             'save_period': 10,
-             'model_dir' :  'models/%s/' % model_dir,
+             # 'eval_metric': ['ndcg@5', 'ndcg@10'],
              # 'booster': 'gblinear',
              # 'alpha': 0.001, 'lambda': 1,
              # 'subsample': 0.5
              }
 
   }
+
+  # subsample 1 [1153]	train-ndcg_error:0.672385	valid-ndcg_error:0.657416
+  # 线上0.486
+  # subsample 0.5
 
   evaluator = Evaluator(conf)
   evaluator.train()
