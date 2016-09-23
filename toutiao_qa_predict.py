@@ -23,7 +23,7 @@ class EvaluatorEval(Evaluator):
     batch_size = self.params.get('batch_size', 128)
 
     import pandas as pd
-    valid_set = pd.read_csv('toutiao_qa_python/invited_info_train.txt.txt')
+    valid_set = pd.read_csv('toutiao_qa_python/invited_info_train.txt')
 
     question_info = self.load('question_info.pkl')
     user_info = self.load('user_info.pkl')
