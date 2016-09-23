@@ -489,9 +489,9 @@ class Evaluator:
       l = labels[offset:offset+size]
       offset += size
 
-      rec_result = [(p[i], l[i]) for i in range(size)]
+      rec_result = [(p[i] , l[i]) for i in range(size)]
       rec_result = sorted(rec_result, key=lambda x : x[0], reverse=True)
-      predict = [x[0] * x[1] if x[0] > 0 else 0.0 for x in rec_result]
+      predict = [x[1] for x in rec_result]
       scores.append(ndcg_at_k(predict, 5) * 0.5 + ndcg_at_k(predict, 10) * 0.5)
     return 'ndcg_error', np.mean(scores)
 
@@ -530,7 +530,7 @@ class Evaluator:
                  (dvalid, 'valid')]
 
     self.bst = xgb.train(self.conf['xgb_param'], dtrain, nb_epoch, watchlist ,
-                    early_stopping_rounds=500,
+                    early_stopping_rounds=2000,
                     feval=self.ndcgerror
                     )
 
