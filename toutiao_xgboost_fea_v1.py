@@ -73,6 +73,10 @@ class Evaluator:
     import pandas as pd
     self.submit_valid_set = pd.read_csv(
             'toutiao_qa_python/validate_nolabel.txt')
+    if not self.load_features():
+      self.building_features()
+    else:
+      self.log('loadding features from pickle')
 
 
   ##### Resources #####
@@ -498,11 +502,6 @@ class Evaluator:
   def train(self):
     nb_epoch = self.params.get('nb_epoch', None)
     #
-    if not self.load_features():
-      self.building_features()
-    else:
-      self.log('loadding features from pickle')
-
     label = 'answer_flag'
     features = list(self.train_set.keys())
     features.remove('question_id')
@@ -515,12 +514,11 @@ class Evaluator:
     valid = self.valid_set.drop(['question_id', 'user_id', 'answer_flag',
                                  'is_valid'], axis=1)
 
-    online_valid = self.submit_valid_set.drop(['qid', 'uid', 'label'], axis=1)
 
     dtrain = XGMatrix(data=train, label=self.train_set[label])
     dvalid = XGMatrix(data=valid, label=self.valid_set[label])
 
-    dsubmit = XGMatrix(data=online_valid)
+
 
     # only use for ranking
     dtrain.set_group(list(self.train_set_group))
@@ -536,23 +534,56 @@ class Evaluator:
 
     print('best iteration is ', self.bst.best_iteration)
 
-    # total_merge_data = self.train_set.append(self.valid_set)
-    # total_group = total_merge_data.groupby('question_id').size()
-    # dtotal = XGMatrix(data=total_merge_data, label=total_merge_data[label])
-    # dtotal.set_group(total_group)
-    #
-    # watchlist = [(dtotal, 'train')]
-    #
-    # self.log('start total data training')
-    # bst = xgb.train(self.conf['xgb_param'], dtrain, bst.best_iteration,
-    #                 watchlist, feval=self.ndcgerror)
 
+  def train_with_total(self, iteratoion=None):
+    train_total = pd.concat([self.train_set, self.valid_set])
+    assert isinstance(train_total, pd.DataFrame)
+
+    label = train_total['answer_flag']
+    train = train_total.drop(['question_id', 'user_id', 'answer_flag',
+                                 'is_valid'], axis=1)
+
+    valid = self.valid_set.drop(['question_id', 'user_id', 'answer_flag',
+                                 'is_valid'], axis=1)
+
+    dvalid = XGMatrix(data=valid, label=self.valid_set['answer_flag'])
+
+    total_group = list()
+    total_group.extend(self.train_set_group)
+    total_group.extend(self.valid_set_group)
+    dtrain = XGMatrix(data=train, label=label)
+
+    dtrain.set_group(total_group)
+    dvalid.set_group(self.valid_set_group)
+
+    watchlist = [(dtrain, 'train'),
+                 (dvalid, 'valid')]
+
+    if iteratoion == None:
+      best_iteration = self.bst.best_iteration
+    else :
+      best_iteration = iteratoion
+
+    self.bst = xgb.train(self.conf['xgb_param'], dtrain, best_iteration, watchlist,
+                         feval=self.ndcgerror)
+
+  def predict(self):
+
+    online_valid = self.submit_valid_set.drop(['qid', 'uid', 'label'], axis=1)
+    dsubmit = XGMatrix(data=online_valid)
     predict = self.bst.predict(dsubmit, ntree_limit=self.bst.best_iteration)
+
+    max = np.max(predict)
+    min = np.min(predict)
+
     output = []
+
+
+
     for i in self.submit_valid_set.index:
       output.append([self.submit_valid_set['qid'][i],
                      self.submit_valid_set['uid'][i],
-                     predict[i]])
+                     (predict[i] - min)/(max - min) ])
     #
     import csv
     #
@@ -593,7 +624,7 @@ if __name__ == '__main__':
              'objective': 'rank:pairwise',
              # 'objective': 'binary:logistic',
              # 'num_class' : 2,
-             'subsample': 0.5,
+             'subsample': 0.9,
              'booster': 'gbtree',
              # 'eval_metric': ['ndcg@5', 'ndcg@10'],
              # 'booster': 'gblinear',
@@ -603,9 +634,8 @@ if __name__ == '__main__':
 
   }
 
-  # subsample 1 [1153]	train-ndcg_error:0.672385	valid-ndcg_error:0.657416
-  # 线上0.486
-  # subsample 0.5
-
   evaluator = Evaluator(conf)
-  evaluator.train()
+  # evaluator.train()
+  evaluator.train_with_total(917)
+  evaluator.predict()
+

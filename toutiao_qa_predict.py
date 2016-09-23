@@ -19,8 +19,48 @@ random.seed(42)
 
 
 class EvaluatorEval(Evaluator):
+  def predict_train(self, model, mode):
+    batch_size = self.params.get('batch_size', 128)
 
-  def predict(self, model):
+    import pandas as pd
+    valid_set = pd.read_csv('toutiao_qa_python/invited_info_train.txt.txt')
+
+    question_info = self.load('question_info.pkl')
+    user_info = self.load('user_info.pkl')
+
+    question_words_seq = [
+      list(question_info['words_seq'][x])
+      for x in valid_set['qid']]
+
+    # questions = list()
+    # answers = list()
+
+    answers_words_seq = [
+      list(user_info['user_desc_words_sec'][x])
+      for x in valid_set['uid']]
+
+    question_words_seq = self.padq(question_words_seq)
+    answers_words_seq = self.pada(answers_words_seq)
+
+    predict = model.prediction_model.predict(
+            [question_words_seq, answers_words_seq],
+            batch_size=batch_size, verbose=1)
+    output = []
+    for i in valid_set.index:
+      output.append([valid_set['qid'][i], valid_set['uid'][i], predict[i]])
+
+    import csv
+    output_file = open('features/train_%s.csv' % mode, 'w')
+    writer = csv.writer(output_file)
+    writer.writerow(['qid', 'uid', 'label'])
+    for x in output:
+      writer.writerow([x[0], x[1], x[2][0][0]])
+
+    output_file.close()
+
+    return output
+
+  def predict(self, model, mode):
     batch_size = self.params.get('batch_size', 128)
 
     import pandas as pd
@@ -51,7 +91,7 @@ class EvaluatorEval(Evaluator):
       output.append([valid_set['qid'][i], valid_set['uid'][i], predict[i]])
 
     import csv
-    output_file = open('output/valid.csv', 'w')
+    output_file = open('features/valid_%s.csv' % mode, 'w')
     writer = csv.writer(output_file)
     writer.writerow(['qid', 'uid', 'label'])
     for x in output:
@@ -124,9 +164,12 @@ if __name__ == '__main__':
                                      #4  0.68599
                                      #9  0.705385
   model_dir = '2016-09-10 11:18:29'
-  epoch = 1
+  epoch = 12
+
 
   conf = pickle.load(open('models/%s/conf' % model_dir, 'rb'))
+
+  print(conf['similarity_params'])
 
   evaluator = EvaluatorEval(conf)
   ##### Define model ######
@@ -143,7 +186,12 @@ if __name__ == '__main__':
   # train the model
   evaluator.load_epoch(model, epoch)
   # output = evaluator.valid(model)
-  output = evaluator.predict(model)
+
+  print('predict train')
+  output = evaluator.predict_train(model, conf['similarity_params']['mode'])
+  print('predict valid')
+  output = evaluator.predict(model, conf['similarity_params']['mode'])
+
 
   # print(output)
 
