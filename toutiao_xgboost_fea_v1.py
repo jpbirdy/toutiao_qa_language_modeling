@@ -70,7 +70,6 @@ class Evaluator:
 
 
     #   submit result
-    import pandas as pd
     self.submit_valid_set = pd.read_csv(
             'toutiao_qa_python/validate_nolabel.txt')
     if not self.load_features():
@@ -424,13 +423,70 @@ class Evaluator:
     for key, func in question_features.items():
       self.submit_valid_set[key] = self.submit_valid_set['qid'].apply(func)
 
+  def norm(self):
+    pass
+
+  def deal_v2_gesd_aesd_sim_fetures(self):
+    gesd_file = ('features/train_gesd.csv', 'features/valid_gesd.csv')
+    gesd_train_sim = pd.read_csv(gesd_file[0])
+    gesd_train_sim.columns = ['question_id', 'user_id', 'gesd_sim']
+
+    from normalization import MaxMinNormalization
+    gesd_train_sim['gesd_max_min_norm'], max, min = MaxMinNormalization(
+            gesd_train_sim['gesd_sim'])
+
+    gesd_submit_sim = pd.read_csv(gesd_file[1])
+    gesd_submit_sim.columns = ['qid', 'uid', 'gesd_sim']
+    gesd_submit_sim['gesd_max_min_norm'], max, min = MaxMinNormalization(
+            gesd_submit_sim['gesd_sim'], max, min)
+
+
+
+    self.train_set = pd.merge(self.train_set, gesd_train_sim, how='inner',
+                          on=['question_id', 'user_id'])
+    self.valid_set = pd.merge(self.valid_set, gesd_train_sim, how='inner',
+                          on=['question_id', 'user_id'])
+
+    self.submit_valid_set = pd.merge(self.submit_valid_set, gesd_submit_sim, how='inner',
+                          on=['qid', 'uid'])
+
+    aesd_file = ('features/train_aesd.csv', 'features/valid_aesd.csv')
+    aesd_train_sim = pd.read_csv(aesd_file[0])
+    aesd_train_sim.columns = ['question_id', 'user_id', 'aesd_sim']
+
+    from normalization import MaxMinNormalization
+    aesd_train_sim['aesd_max_min_norm'], max, min = MaxMinNormalization(
+            aesd_train_sim['aesd_sim'])
+
+    aesd_submit_sim = pd.read_csv(aesd_file[1])
+    aesd_submit_sim.columns = ['qid', 'uid', 'aesd_sim']
+    aesd_submit_sim['aesd_max_min_norm'], max, min = MaxMinNormalization(
+            aesd_submit_sim['aesd_sim'], max, min)
+
+    self.train_set = pd.merge(self.train_set, aesd_train_sim, how='inner',
+                              on=['question_id', 'user_id'])
+    self.valid_set = pd.merge(self.valid_set, aesd_train_sim, how='inner',
+                              on=['question_id', 'user_id'])
+
+    self.submit_valid_set = pd.merge(self.submit_valid_set, aesd_submit_sim,
+                                     how='inner',
+                                     on=['qid', 'uid'])
+
+    self.train_set = self.train_set.sort_values('question_id')
+    self.valid_set = self.valid_set.sort_values('question_id')
+    self.train_set_group = self.train_set.groupby('question_id').size()
+    self.valid_set_group = self.valid_set.groupby('question_id').size()
+
   def building_features(self):
-    self.log('start building features')
+    self.log('start building features version %d' % self.conf.get('version'))
     self.words_tfidf()
     self.characters_tfidf()
     self.deal_questions_feas()
     self.deal_user_feas()
     self.deal_question_user_feas()
+
+    self.deal_v2_gesd_aesd_sim_fetures()
+    self.save_features()
 
 
 
@@ -503,16 +559,32 @@ class Evaluator:
     nb_epoch = self.params.get('nb_epoch', None)
     #
     label = 'answer_flag'
-    features = list(self.train_set.keys())
-    features.remove('question_id')
-    features.remove('user_id')
-    features.remove('answer_flag')
-    features.remove('is_valid')
+
+    # train = self.train_set.drop(['question_id', 'user_id', 'answer_flag',
+    #                              'is_valid'], axis=1)
+    # valid = self.valid_set.drop(['question_id', 'user_id', 'answer_flag',
+    #                              'is_valid'], axis=1)
+
+    print('training on %d samples' % len(self.train_set))
 
     train = self.train_set.drop(['question_id', 'user_id', 'answer_flag',
-                                 'is_valid'], axis=1)
+                                 'is_valid',
+                                 # 'aesd_sim',
+                                 # 'aesd_max_min_norm',
+                                 # 'gesd_sim',
+                                 # 'gesd_max_min_norm',
+
+                                 ],
+                                axis=1)
     valid = self.valid_set.drop(['question_id', 'user_id', 'answer_flag',
-                                 'is_valid'], axis=1)
+                                 'is_valid',
+                                 # 'aesd_sim',
+                                 # 'aesd_max_min_norm',
+                                 # 'gesd_sim',
+                                 # 'gesd_max_min_norm',
+                                 ],
+                                axis=1)
+
 
 
     dtrain = XGMatrix(data=train, label=self.train_set[label])
@@ -528,7 +600,7 @@ class Evaluator:
                  (dvalid, 'valid')]
 
     self.bst = xgb.train(self.conf['xgb_param'], dtrain, nb_epoch, watchlist ,
-                    early_stopping_rounds=2000,
+                    early_stopping_rounds=1000,
                     feval=self.ndcgerror
                     )
 
@@ -540,11 +612,29 @@ class Evaluator:
     assert isinstance(train_total, pd.DataFrame)
 
     label = train_total['answer_flag']
+    # train = train_total.drop(['question_id', 'user_id', 'answer_flag',
+    #                              'is_valid'], axis=1)
+    #
+    # valid = self.valid_set.drop(['question_id', 'user_id', 'answer_flag',
+    #                              'is_valid'], axis=1)
     train = train_total.drop(['question_id', 'user_id', 'answer_flag',
-                                 'is_valid'], axis=1)
+                                 'is_valid',
+                                 # 'aesd_sim',
+                                 # 'aesd_max_min_norm',
+                                 # 'gesd_sim',
+                                 # 'gesd_max_min_norm',
+
+                                 ],
+                                axis=1)
 
     valid = self.valid_set.drop(['question_id', 'user_id', 'answer_flag',
-                                 'is_valid'], axis=1)
+                               'is_valid',
+                               # 'aesd_sim',
+                               # 'aesd_max_min_norm',
+                               # 'gesd_sim',
+                               # 'gesd_max_min_norm',
+                               ],
+                              axis=1)
 
     dvalid = XGMatrix(data=valid, label=self.valid_set['answer_flag'])
 
@@ -559,7 +649,7 @@ class Evaluator:
     watchlist = [(dtrain, 'train'),
                  (dvalid, 'valid')]
 
-    if iteratoion == None:
+    if iteratoion is None:
       best_iteration = self.bst.best_iteration
     else :
       best_iteration = iteratoion
@@ -569,7 +659,13 @@ class Evaluator:
 
   def predict(self):
 
-    online_valid = self.submit_valid_set.drop(['qid', 'uid', 'label'], axis=1)
+    online_valid = self.submit_valid_set.drop([
+      'qid', 'uid', 'label',
+      # 'aesd_sim',
+      # 'aesd_max_min_norm',
+      # 'gesd_sim',
+      # 'gesd_max_min_norm',
+    ], axis=1)
     dsubmit = XGMatrix(data=online_valid)
     predict = self.bst.predict(dsubmit, ntree_limit=self.bst.best_iteration)
 
@@ -587,7 +683,7 @@ class Evaluator:
     #
     import csv
     #
-    output_file = open('output/valid.csv', 'w')
+    output_file = open('output/valid2.csv', 'w')
     writer = csv.writer(output_file)
     writer.writerow(['qid', 'uid', 'label'])
     for x in output:
@@ -597,12 +693,9 @@ class Evaluator:
 
 
 
+
 if __name__ == '__main__':
-  import numpy as np
-  try:
-    version = sys.argv[1]
-  except:
-    version = '1'
+  version = '2'
 
 
   conf = {
@@ -612,7 +705,7 @@ if __name__ == '__main__':
     'training_params': {
       'save_every': 1,
       'batch_size': 256,
-      'nb_epoch': 5000,
+      'nb_epoch': 8000,
       'validation_split': 0.1,
     },
     'xgb_param' : {'max_depth': 6,
@@ -624,18 +717,20 @@ if __name__ == '__main__':
              'objective': 'rank:pairwise',
              # 'objective': 'binary:logistic',
              # 'num_class' : 2,
-             'subsample': 0.9,
+             'subsample': 0.7,
+             'colsample_bytree' : 0.5,
              'booster': 'gbtree',
              # 'eval_metric': ['ndcg@5', 'ndcg@10'],
              # 'booster': 'gblinear',
-             # 'alpha': 0.001, 'lambda': 1,
+             'alpha': 0.001, 'lambda': 1,
              # 'subsample': 0.5
              }
 
   }
 
   evaluator = Evaluator(conf)
-  # evaluator.train()
-  evaluator.train_with_total(917)
+  evaluator.train()
+  # evaluator.train_with_total(100)
+  evaluator.train_with_total()
   evaluator.predict()
 
